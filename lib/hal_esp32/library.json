@@ -1,0 +1,7 @@
+{
+  "name": "hal_esp32",
+  "version": "0.1.0",
+  "description": "Implementacion real (ESP32 clasico, Arduino-ESP32) de las interfaces de lib/core/hal.h, mas la interfaz de linea de los transportes.",
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}

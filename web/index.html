@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0f14">
+<link rel="icon" href="data:,">
+<title>Duelo láser · mantenimiento</title>
+<style>
+:root{--bg:#0b0f14;--panel:#131b25;--panel2:#1a2431;--cell:#0e151d;--line:#2a3647;--txt:#e7edf5;--mut:#9aa7b8;--acc:#2dd4bf;--acc-ink:#03201c;--ok:#34d399;--warn:#fbbf24;--err:#ff6b6b;--stop:#d81e2c;--stop-d:#8e121b}
+*{box-sizing:border-box}
+html{background:var(--bg);-webkit-text-size-adjust:100%}
+body{margin:0 auto;padding:12px 16px 24px;max-width:640px;background:var(--bg);color:var(--txt);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+h1{margin:4px 0;font-size:1.2rem}
+h1 small{color:var(--mut);font-weight:400;font-size:.9rem}
+h2{margin:0 0 8px;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+section,details{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px;margin-top:12px}
+.pill{display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel2);font-size:.9rem}
+.dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--mut)}
+.pill.on .dot{background:var(--ok)}
+.pill.busy .dot{background:var(--warn)}
+.pill.off .dot{background:var(--err)}
+.hint{margin:8px 0 0;color:var(--mut);font-size:.82rem;text-align:center}
+.board{display:grid;grid-template-columns:20px repeat(20,minmax(0,1fr));gap:2px;align-items:center}
+.lab{display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;color:var(--mut)}
+.lab.ly{justify-content:flex-end;padding-right:3px}
+.board .c{aspect-ratio:1/1;width:100%;min-width:0;min-height:0;padding:0;border-radius:3px;background:var(--cell);border:1px solid #1f2b3b}
+.board .c.sel{background:var(--acc);border-color:#9ff5ea;box-shadow:0 0 0 2px rgba(45,212,191,.35)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.fields label,.calgrid label{display:grid;gap:4px;color:var(--mut);font-size:.9rem;font-weight:600}
+input{width:100%;min-height:48px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--cell);color:var(--txt);font:inherit;font-size:1.15rem;text-align:center}
+input.bad{border-color:var(--err);box-shadow:0 0 0 2px rgba(255,107,107,.3)}
+.cur{grid-column:1/-1;text-align:center;font-weight:600}
+button{min-height:52px;padding:10px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel2);color:var(--txt);font:inherit;font-weight:700;letter-spacing:.03em;cursor:pointer;touch-action:manipulation}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.big{width:100%;min-height:64px;font-size:1.15rem}
+.acc{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.warn{color:var(--warn);border-color:#6b5513}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.btns{display:grid;gap:10px}
+.msg{min-height:1.5em;text-align:center;font-weight:600;overflow-wrap:anywhere}
+.msg.wait{color:var(--warn)}
+.msg.ok{color:var(--ok)}
+.msg.err{color:var(--err)}
+.regbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.regbar h2{margin:0}
+.regbar button{min-height:40px;padding:6px 14px;font-size:.9rem}
+.log{list-style:none;margin:0;padding:0;max-height:50vh;overflow-y:auto}
+.log li{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px solid var(--line);font:14px/1.35 ui-monospace,Consolas,"Cascadia Mono",monospace}
+.log time{flex:none;color:var(--mut);font-size:12px}
+.log span{min-width:0;overflow-wrap:anywhere}
+.log .tx span{color:#8fd3ff}
+.log .rx span{color:var(--txt)}
+.log .err span{color:var(--err);font-weight:700}
+.log .dim span{color:var(--mut)}
+details summary{min-height:44px;display:flex;align-items:center;font-weight:700;cursor:pointer;list-style:none}
+details summary::before{content:"\25B8";margin-right:8px;color:var(--mut)}
+details[open] summary::before{content:"\25BE"}
+.calgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.stopbar{position:sticky;bottom:0;margin:16px -16px 0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(rgba(11,15,20,0),var(--bg) 40%)}
+.stop{width:100%;min-height:76px;font-size:1.5rem;letter-spacing:.08em;background:var(--stop);border:2px solid #ff5a64;color:#fff}
+.stop:active{background:var(--stop-d)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Duelo láser <small>· mantenimiento</small></h1>
+  <div id="status" class="pill"><span class="dot"></span><span id="stxt">Comprobando…</span></div>
+</header>
+
+<section aria-labelledby="h-obj">
+  <h2 id="h-obj">Objetivo</h2>
+  <div id="board" class="board" aria-label="Tablero 20 por 20"></div>
+  <p class="hint">x → derecha · y ↓ hacia el frente · (1,1) = esquina más cercana a la estación</p>
+  <div class="fields">
+    <label>x <input id="x" type="number" inputmode="numeric" min="1" max="20" step="1" value="1"></label>
+    <label>y <input id="y" type="number" inputmode="numeric" min="1" max="20" step="1" value="1"></label>
+    <div id="cur" class="cur">Celda (1,1)</div>
+  </div>
+</section>
+
+<section class="btns">
+  <button id="fire" class="big acc" type="button">DISPARAR</button>
+  <button id="test" class="big" type="button">TEST</button>
+  <div id="shot" class="msg" aria-live="polite"></div>
+  <div class="grid2">
+    <button id="mhit" type="button">MARK HIT</button>
+    <button id="mmiss" type="button">MARK MISS</button>
+  </div>
+</section>
+
+<section>
+  <div class="regbar"><h2>Registro</h2><button id="clear" type="button">Limpiar</button></div>
+  <ol id="log" class="log"></ol>
+</section>
+
+<details id="cal">
+  <summary>Calibración</summary>
+  <div class="calgrid">
+    <label>Estación x (mm)<input id="k0" type="number" step="any" value="100"></label>
+    <label>Estación y (mm)<input id="k1" type="number" step="any" value="-65"></label>
+    <label>Altura h (mm)<input id="k2" type="number" step="any" value="180"></label>
+    <label>Trim pan (°)<input id="k3" type="number" step="any" value="0"></label>
+    <label>Trim tilt (°)<input id="k4" type="number" step="any" value="0"></label>
+  </div>
+  <div class="grid2">
+    <button id="calshow" type="button">CAL SHOW</button>
+    <button id="calset" type="button">CAL SET</button>
+    <button id="calsave" type="button">CAL SAVE</button>
+    <button id="calreset" class="warn" type="button">CAL RESET</button>
+  </div>
+</details>
+
+<div class="stopbar"><button id="stop" class="stop" type="button">STOP</button></div>
+
+<script>
+(function () {
+  'use strict';
+  var N = 20;
+  var $ = function (id) { return document.getElementById(id); };
+  var boardEl = $('board'), logEl = $('log'), statusEl = $('status'), stxt = $('stxt');
+  var xIn = $('x'), yIn = $('y'), curEl = $('cur'), shotEl = $('shot');
+  var fireBtn = $('fire'), testBtn = $('test');
+  var K = [$('k0'), $('k1'), $('k2'), $('k3'), $('k4')];
+  var cells = [], selBtn = null;
+  var busy = 0;            // disparos/TEST lanzados desde esta página y aún en curso
+  var remoteBusy = false;  // el último PING respondió ERR BUSY (hay un disparo en curso)
+  var pinging = false;
+
+  // ---------- utilidades ----------
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function isErr(l) { return /^ERR|ABORT/.test(l); }
+  function toCell(v) {
+    var s = String(v).trim();
+    var n = /^\d+$/.test(s) ? parseInt(s, 10) : 0;
+    return (n >= 1 && n <= N) ? n : 0;
+  }
+  function stamp() {
+    var d = new Date();
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  function log(kind, text) {
+    var li = el('li', kind);
+    li.appendChild(el('time', null, stamp()));
+    li.appendChild(el('span', null, text));
+    logEl.insertBefore(li, logEl.firstChild);
+    while (logEl.children.length > 300) logEl.removeChild(logEl.lastChild);
+  }
+  function setStatus(kind, text) {
+    statusEl.className = 'pill ' + kind;
+    stxt.textContent = text;
+  }
+
+  // ---------- tablero 20x20: (1,1) arriba a la izquierda, x a la derecha, y hacia abajo ----------
+  function buildBoard() {
+    var frag = document.createDocumentFragment(), i, j, b;
+    frag.appendChild(el('span', 'lab'));
+    for (i = 1; i <= N; i++) frag.appendChild(el('span', 'lab', String(i)));
+    for (j = 1; j <= N; j++) {
+      frag.appendChild(el('span', 'lab ly', String(j)));
+      for (i = 1; i <= N; i++) {
+        b = el('button', 'c');
+        b.type = 'button';
+        b.dataset.x = i;
+        b.dataset.y = j;
+        b.setAttribute('aria-label', 'x ' + i + ', y ' + j);
+        cells[(j - 1) * N + (i - 1)] = b;
+        frag.appendChild(b);
+      }
+    }
+    boardEl.appendChild(frag);
+  }
+  function markSel(x, y) {
+    if (selBtn) selBtn.classList.remove('sel');
+    selBtn = cells[(y - 1) * N + (x - 1)];
+    selBtn.classList.add('sel');
+    curEl.textContent = 'Celda (' + x + ',' + y + ')';
+  }
+  function setCell(x, y) {
+    xIn.value = x;
+    yIn.value = y;
+    xIn.classList.remove('bad');
+    yIn.classList.remove('bad');
+    markSel(x, y);
+    updateButtons();
+  }
+  function onFieldInput() {
+    var x = toCell(xIn.value), y = toCell(yIn.value);
+    xIn.classList.toggle('bad', !x);
+    yIn.classList.toggle('bad', !y);
+    if (x && y) markSel(x, y);
+    else curEl.textContent = 'x e y deben ser de 1 a 20';
+    updateButtons();
+  }
+  boardEl.addEventListener('click', function (e) {
+    var b = e.target.closest('.c');
+    if (b) setCell(Number(b.dataset.x), Number(b.dataset.y));
+  });
+  xIn.addEventListener('input', onFieldInput);
+  yIn.addEventListener('input', onFieldInput);
+
+  // ---------- comunicación: fetch('/cmd?l=' + linea) ----------
+  function send(line, ms) {
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, ms);
+    return fetch('/cmd?l=' + encodeURIComponent(line), { cache: 'no-store', signal: ctl.signal })
+      .then(function (r) { return r.text(); })
+      .then(function (t) {
+        return t.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+      })
+      .finally(function () { clearTimeout(timer); });
+  }
+  function cmd(line, ms) {
+    log('tx', '→ ' + line);
+    return send(line, ms || 90000).then(function (lines) {
+      if (!lines.length) log('err', '← (respuesta vacía)');
+      lines.forEach(function (l) { log(isErr(l) ? 'err' : 'rx', '← ' + l); });
+      return lines;
+    }, function (e) {
+      log('err', '← sin conexión: ' + (e && e.name === 'AbortError' ? 'tiempo agotado' : 'no responde'));
+      setStatus('off', 'Sin conexión');
+      return null;
+    });
+  }
+
+  // ---------- conexión: PING cada 5 s ----------
+  function ping() {
+    if (pinging) return;
+    pinging = true;
+    var quiet = busy > 0;   // con un disparo en curso no llenamos el registro de PING
+    if (!quiet) log('dim', '→ PING');
+    send('PING', 4000).then(function (lines) {
+      var first = lines[0] || '';
+      if (!quiet) lines.forEach(function (l) { log(isErr(l) ? 'err' : 'dim', '← ' + l); });
+      if (/^PONG/.test(first)) {
+        var p = first.split(/\s+/);
+        remoteBusy = false;
+        setStatus('on', 'Conectado · ' + (p[1] || 'módulo') + ' ' + (p[2] || ''));
+      } else if (/^ERR BUSY/.test(first)) {
+        remoteBusy = true;
+        setStatus('busy', 'Conectado · ocupado (disparo en curso)');
+      } else {
+        setStatus('off', 'Respuesta inesperada');
+      }
+      updateButtons();
+    }, function () {
+      remoteBusy = false;
+      setStatus('off', 'Sin conexión');
+      updateButtons();
+    }).finally(function () { pinging = false; });
+  }
+
+  // ---------- botones ----------
+  function updateButtons() {
+    var blocked = busy > 0 || remoteBusy;
+    var valid = toCell(xIn.value) > 0 && toCell(yIn.value) > 0;
+    fireBtn.disabled = blocked || !valid;
+    testBtn.disabled = blocked;
+  }
+  function runShot(line, text, ms) {
+    busy++;
+    updateButtons();
+    shotEl.className = 'msg wait';
+    shotEl.textContent = text;
+    return cmd(line, ms).then(function (lines) {
+      if (!lines) {
+        shotEl.className = 'msg err';
+        shotEl.textContent = 'Sin conexión';
+        return;
+      }
+      shotEl.className = 'msg ' + (lines.some(isErr) ? 'err' : 'ok');
+      shotEl.textContent = lines.join('  ·  ');
+    }).finally(function () {
+      busy = Math.max(0, busy - 1);
+      remoteBusy = false;
+      updateButtons();
+    });
+  }
+  fireBtn.addEventListener('click', function () {
+    var x = toCell(xIn.value), y = toCell(yIn.value);
+    if (x && y) runShot('(' + x + ',' + y + ')', 'Disparando (' + x + ',' + y + ')…', 90000);
+  });
+  testBtn.addEventListener('click', function () {
+    runShot('TEST', 'TEST en curso (5 posiciones)…', 180000);
+  });
+  $('stop').addEventListener('click', function () { cmd('STOP', 10000); });
+  $('mhit').addEventListener('click', function () { cmd('MARK HIT', 10000); });
+  $('mmiss').addEventListener('click', function () { cmd('MARK MISS', 10000); });
+  $('clear').addEventListener('click', function () { logEl.innerHTML = ''; });
+
+  // ---------- calibración ----------
+  function refreshCal() {
+    return cmd('CAL SHOW', 10000).then(function (lines) {
+      var m = lines && lines[0] && lines[0].match(/^CAL\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/);
+      if (m) for (var i = 0; i < 5; i++) K[i].value = m[i + 1];
+    });
+  }
+  $('calshow').addEventListener('click', refreshCal);
+  $('calset').addEventListener('click', function () {
+    var v = K.map(function (f) { return f.value.trim(); });
+    if (v.some(function (s) { return s === ''; })) {
+      log('err', 'CAL SET: completa los 5 campos');
+      return;
+    }
+    cmd('CAL SET ' + v.join(' '), 10000);
+  });
+  $('calsave').addEventListener('click', function () { cmd('CAL SAVE', 10000); });
+  $('calreset').addEventListener('click', function () {
+    if (window.confirm('¿Restablecer la calibración y borrar la guardada?')) {
+      cmd('CAL RESET', 10000).then(function (lines) { if (lines) refreshCal(); });
+    }
+  });
+
+  // ---------- arranque ----------
+  buildBoard();
+  setCell(1, 1);
+  ping();
+  setInterval(ping, 5000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) ping(); });
+})();
+</script>
+</body>
+</html>

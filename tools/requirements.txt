@@ -1,0 +1,3 @@
+# Opcional. Solo hace falta para `sim_phone.py --serial COMx` (puerto serie real).
+# fake_device.py y sim_phone.py (HTTP/TCP) usan solo la biblioteca estándar de Python.
+pyserial>=3.5
