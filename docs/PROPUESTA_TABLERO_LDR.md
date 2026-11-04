@@ -1,5 +1,5 @@
 # Propuesta Técnica: Tablero Óptico Activo con Fotorresistencias (LDR) / Detección Láser
-> Añadido al proyecto **duelo-laser** (Batalla Naval con ESP32) para soportar sensado automático de posición de barcos y confirmación de impacto láser.
+> Añadido al proyecto **SONAR** (Batalla Naval con ESP32) para soportar sensado automático de posición de barcos y confirmación de impacto láser.
 
 ## 1. Concepto y Desafío Físico
 Sebas propone un tablero de $20 \times 20$ celdas ($400$ posiciones) donde:
@@ -14,7 +14,7 @@ Con $400$ celdas, conectar $400$ sensores analógicos directamente al ESP32 es i
   - $t_1$: Lectura con láser encendido durante $t_{pulse} = 50\text{ ms}$.
   - Condición de impacto: $\Delta V = V(t_1) - V(t_0) > \text{Threshold}$.
 
-## 3. Integración con el Repo `duelo-laser` (`I:\repository\Batalla Naval - Sonar\duelo-laser`)
+## 3. Integración con el Repo `sonar` (`I:\repository\Batalla Naval - Sonar\sonar`)
 Se creará un nuevo módulo / target en PlatformIO (`platformio.ini`), por ejemplo `[env:modulo_optico]`, que extienda `lib/hal_esp32` con:
 - `lib/hal_esp32/mux_matrix.cpp`: Rutina de barrido secuencial de los 400 canales vía MUX.
 - `lib/core/sensor_grid.h`: Lógica de validación de flota y confirmación de impacto.

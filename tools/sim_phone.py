@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Celular de pruebas por línea de comandos para el módulo duelo-laser.
+"""Celular de pruebas por línea de comandos para el módulo SONAR.
 
 Transportes (elige uno):
   --tcp HOST:PUERTO          líneas crudas (fake_device.py --tcp, o el módulo por TCP)
@@ -282,7 +282,7 @@ def _utf8_streams() -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description="Celular de pruebas para el módulo duelo-laser.")
+    ap = argparse.ArgumentParser(description="Celular de pruebas para el módulo SONAR.")
     grp = ap.add_mutually_exclusive_group(required=True)
     grp.add_argument("--tcp", metavar="HOST:PUERTO", help="transporte TCP de líneas crudas")
     grp.add_argument("--http", metavar="URL", help="transporte HTTP, p. ej. http://127.0.0.1:8080")

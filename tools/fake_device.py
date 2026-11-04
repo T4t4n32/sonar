@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Módulo SIMULADO de duelo-laser (solo biblioteca estándar).
+"""Módulo SIMULADO de SONAR (solo biblioteca estándar).
 
 Implementa docs/PROTOCOLO.md en dos transportes:
   * HTTP: GET /         -> web/index.html

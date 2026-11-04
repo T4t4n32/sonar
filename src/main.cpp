@@ -1,4 +1,4 @@
-// duelo-laser: firmware de un módulo (el MISMO programa en A y B; el nombre sale de DEVICE_NAME).
+// SONAR: firmware de un módulo (el MISMO programa en A y B; el nombre sale de DEVICE_NAME).
 //
 // Dos modos, elegidos UNA vez al arrancar leyendo el pin MAINT:
 //   Juego          (MAINT abierto): Bluetooth SPP (DEVICE_NAME) + USB. El Wi-Fi no se inicia.

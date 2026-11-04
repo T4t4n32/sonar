@@ -1,7 +1,7 @@
 {
   "name": "core",
   "version": "0.1.0",
-  "description": "Logica pura de duelo-laser (protocolo, geometria, controlador). Sin Arduino: se prueba en el PC.",
+  "description": "Logica pura de SONAR (protocolo, geometria, controlador). Sin Arduino: se prueba en el PC.",
   "build": {
     "flags": ["-I../../include"]
   }
