@@ -1,0 +1,23 @@
+{
+  "name": "sonar-app",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "SONAR — Batalla Naval Android wrapper",
+  "scripts": {
+    "cap:add": "npx cap add android",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "build:apk": "cd android && gradlew.bat assembleDebug",
+    "sync:web": "python sync-web.py"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@e-is/capacitor-bluetooth-serial": "^6.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "typescript": "^7.0.2"
+  }
+}

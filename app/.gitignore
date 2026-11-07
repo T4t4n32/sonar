@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Android build outputs
+android/build/
+android/.gradle/
+android/app/build/
+android/app/release/
+android/app/debug/
+
+# Local configuration
+local.properties
+
+# Keystores
+*.jks
+keystore*
+*.keystore
+
+# Generated APKs
+dist-apk/*.apk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

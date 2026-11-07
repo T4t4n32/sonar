@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SONAR</string>
+    <string name="title_activity_main">SONAR</string>
+    <string name="package_name">com.sonar.batallanaval</string>
+    <string name="custom_url_scheme">com.sonar.batallanaval</string>
+</resources>

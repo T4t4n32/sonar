@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build modulo_a
+        run: pio run -e modulo_a
+
+      - name: Run native tests (Unity)
+        run: pio test -e native
+
+      - name: Start fake_device.py on port 8080
+        run: |
+          python tools/fake_device.py --port 8080 --speed 10 &
+          FAKE_PID=$!
+          echo "FAKE_PID=$FAKE_PID" >> $GITHUB_ENV
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:8080/ >/dev/null; then
+              echo "fake_device ready"
+              break
+            fi
+            sleep 0.5
+          done
+
+      - name: Run sim_phone.py selftest
+        run: python tools/sim_phone.py --http http://127.0.0.1:8080 selftest
+
+      - name: Stop fake_device.py
+        if: always()
+        run: |
+          if [ -n "$FAKE_PID" ]; then kill $FAKE_PID 2>/dev/null || true; fi
