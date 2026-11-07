@@ -4,13 +4,14 @@
 
 namespace core {
 
-enum class CmdType { Fire, Test, Stop, Ping, CalShow, CalSet, CalSave, CalReset, MarkHit, MarkMiss };
+enum class CmdType { Fire, Test, Stop, Ping, CalShow, CalSet, CalSave, CalReset, MarkHit, MarkMiss, Hello, Mode, Arm };
 enum class ParseError { None, Empty, TooLong, BadFormat, Range, Unknown };
 
 struct Command {
   CmdType type = CmdType::Ping;
   int x = 0, y = 0;                 // Fire
   float cal[5] = {0, 0, 0, 0, 0};   // CalSet: xs ys h panTrim tiltTrim
+  int mode = 0;                     // Mode: 0 = consulta, 1 = BT, 2 = WIFI
 };
 struct ParseResult { ParseError err = ParseError::None; Command cmd; };
 
@@ -18,6 +19,7 @@ constexpr unsigned MAX_LINE = 64;
 
 // Tolerante con espacios, \r\n y mayúsculas/minúsculas. "(x,y)" EXIGE paréntesis; x,y enteros en 1..cfg::GRID_N.
 //   "(12,7)" / "( 12 , 7 )" → Fire;  "TEST","STOP","PING","CAL SHOW","CAL SET a b c d e","CAL SAVE","CAL RESET","MARK HIT","MARK MISS".
+// Protocolo v2: "HELLO", "ARM" (consulta), "MODE" (consulta) y "MODE BT" / "MODE WIFI". "MODE X" desconocido → Unknown.
 // Errores: línea vacía → Empty; > MAX_LINE → TooLong; "(a,b)" no numérico o sintaxis mala → BadFormat;
 // enteros fuera de 1..GRID_N → Range; palabra desconocida → Unknown. CAL SET exige 5 números → si no, BadFormat.
 ParseResult parseLine(const std::string& line);

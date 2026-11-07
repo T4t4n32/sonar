@@ -223,6 +223,10 @@ def run_selftest(factory, label: str, parallel: bool) -> int:
     expected_test = ["TEST START"] + [f"OK ({x},{y})" for x, y in cells] + ["TEST DONE"]
     cases: list[tuple[str, Callable[[list[str]], bool], str]] = [
         ("PING", _pattern(r"PONG \S+ \d+\.\d+\.\d+"), "PONG <nombre> <versión>"),
+        ("HELLO", _pattern(r"HELLO SONAR 2 \S+ \S+ (BT|WIFI) \S+"), "HELLO SONAR 2 <fw> <nombre> <modo> <caps>"),
+        ("MODE", _pattern(r"MODE (BT|WIFI)"), "MODE <modo>"),
+        ("ARM", _pattern(r"ARM (NOTREQ|OFF|ON \d+)"), "ARM NOTREQ | OFF | ON <s>"),
+        ("MODE FOO", _exact(["ERR UNKNOWN"]), "ERR UNKNOWN"),
         ("(10,10)", _exact(["OK (10,10)"]), "OK (10,10)"),
         ("(0,5)", _exact(["ERR RANGE"]), "ERR RANGE"),
         ("(21,1)", _exact(["ERR RANGE"]), "ERR RANGE"),

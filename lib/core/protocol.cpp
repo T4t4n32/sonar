@@ -104,6 +104,20 @@ ParseResult parseKeyword(const std::string& s) {
     return simple(w == "TEST" ? CmdType::Test : (w == "STOP" ? CmdType::Stop : CmdType::Ping));
   }
 
+  if (w == "HELLO" || w == "ARM") {
+    if (tok.size() != 1) return failure(ParseError::BadFormat);
+    return simple(w == "HELLO" ? CmdType::Hello : CmdType::Arm);
+  }
+
+  if (w == "MODE") {
+    if (tok.size() == 1) return simple(CmdType::Mode);          // consulta
+    if (tok[1] != "BT" && tok[1] != "WIFI") return failure(ParseError::Unknown);
+    if (tok.size() != 2) return failure(ParseError::BadFormat);
+    ParseResult r = simple(CmdType::Mode);
+    r.cmd.mode = (tok[1] == "BT") ? 1 : 2;
+    return r;
+  }
+
   if (w == "MARK") {
     if (tok.size() < 2) return failure(ParseError::BadFormat);
     if (tok[1] != "HIT" && tok[1] != "MISS") return failure(ParseError::Unknown);

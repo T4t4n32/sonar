@@ -161,6 +161,8 @@ bool Controller::fire(Cell c, std::string& errLine) {
   return true;
 }
 
+bool Controller::disarmed() const { return link_.armedSeconds && link_.armedSeconds() <= 0; }
+
 void Controller::handleLine(const std::string& line, const Reply& out) {
   auto say = [&out](const std::string& s) {
     if (out) out(s);
@@ -189,6 +191,10 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
 
   switch (pr.cmd.type) {
     case CmdType::Fire: {
+      if (disarmed()) {
+        say("ERR DISARMED");
+        break;
+      }
       std::string err;
       if (fire(Cell{pr.cmd.x, pr.cmd.y}, err)) {
         say(fireOkText(pr.cmd.x, pr.cmd.y));
@@ -199,6 +205,10 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
     }
 
     case CmdType::Test: {
+      if (disarmed()) {
+        say("ERR DISARMED");
+        break;
+      }
       say("TEST START");
       bool aborted = false;
       for (const auto& tc : cfg::TEST_CELLS) {
@@ -266,6 +276,29 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
 
     case CmdType::MarkMiss:
       say("OK MARK");
+      break;
+
+    case CmdType::Hello:
+      say(std::string("HELLO SONAR 2 ") + FW_VERSION + " " + DEVICE_NAME + " " + link_.mode + " " + link_.caps);
+      break;
+
+    case CmdType::Mode:
+      if (pr.cmd.mode == 0) {
+        say("MODE " + link_.mode);
+      } else if (!link_.requestMode) {
+        say("ERR UNKNOWN");
+      } else {
+        say(link_.requestMode(pr.cmd.mode) ? std::string("OK MODE ") + (pr.cmd.mode == 1 ? "BT" : "WIFI") : "ERR STORE");
+      }
+      break;
+
+    case CmdType::Arm:
+      if (!link_.armedSeconds) {
+        say("ARM NOTREQ");
+      } else {
+        const int left = link_.armedSeconds();
+        say(left > 0 ? "ARM ON " + std::to_string(left) : std::string("ARM OFF"));
+      }
       break;
   }
 }

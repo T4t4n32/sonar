@@ -82,7 +82,7 @@ _NUM_RE = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)")
 
 @dataclass
 class Parsed:
-    kind: str = ""       # FIRE TEST STOP PING MARK_HIT MARK_MISS CAL_SHOW CAL_SET CAL_SAVE CAL_RESET
+    kind: str = ""       # FIRE TEST STOP PING HELLO MODE ARM MARK_HIT MARK_MISS CAL_SHOW CAL_SET CAL_SAVE CAL_RESET
     x: int = 0
     y: int = 0
     vals: tuple = ()
@@ -109,6 +109,14 @@ def parse_line(raw: str) -> Parsed:
     head, args = words[0].upper(), words[1:]
     if head in ("TEST", "STOP", "PING"):
         return Parsed(kind=head) if not args else Parsed(err="FORMAT")
+    if head in ("HELLO", "ARM"):  # protocolo v2 (docs/PROTOCOLO.md)
+        return Parsed(kind=head) if not args else Parsed(err="FORMAT")
+    if head == "MODE":
+        if not args:
+            return Parsed(kind="MODE")
+        if args[0].upper() not in ("BT", "WIFI"):
+            return Parsed(err="UNKNOWN")
+        return Parsed(kind="MODE", vals=(args[0].upper(),)) if len(args) == 1 else Parsed(err="FORMAT")
     if head == "MARK":
         if len(args) == 1 and args[0].upper() in ("HIT", "MISS"):
             return Parsed(kind="MARK_" + args[0].upper())
@@ -285,6 +293,12 @@ class Device:
             return "OK MARK"
         if p.kind == "PING":
             return f"PONG {DEVICE_NAME} {FW_VERSION}"
+        if p.kind == "HELLO":  # el simulador se anuncia como Wi-Fi con envío en vivo (capacidades: sim)
+            return f"HELLO SONAR 2 {FW_VERSION} {DEVICE_NAME} WIFI sim"
+        if p.kind == "MODE":  # no reinicia nada: solo lo acepta, para probar las páginas
+            return f"OK MODE {p.vals[0]}" if p.vals else "MODE WIFI"
+        if p.kind == "ARM":
+            return "ARM NOTREQ"
         if p.kind == "CAL_SHOW":
             c = self.cal
             return f"CAL {c.x:.2f} {c.y:.2f} {c.h:.2f} {c.pan_trim:.2f} {c.tilt_trim:.2f}"

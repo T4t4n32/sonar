@@ -41,3 +41,18 @@ Errores de sintaxis: `ERR EMPTY` (línea vacía), `ERR TOOLONG`, `ERR UNKNOWN` (
 - **TEST:** `STOP` durante el `TEST` → `TEST ABORT` + `ERR STOP`. `CAL RESET` con fallo de NVS → `ERR STORE`.
 - **Tiempos:** el láser permanece encendido ≈ `LASER_ON_MS` + `BEEP_MS` (el pitido ocurre con el láser encendido) y hay una pausa `TEST_GAP_MS` tras **cada** posición del `TEST`, también tras la última.
 - **Calibración por defecto:** ninguna celda da `ERR LIMIT` (pan máx. 53,6° frente a 57°; tilt 33,0°–68,7° frente a 30°–72°); solo aparece con una calibración desplazada.
+
+## Protocolo v2 (compatible hacia atrás; 2026-11-07)
+
+Todo lo anterior sigue igual. Un cliente v1 no necesita nada de esto. Diseño y motivos: `docs/ARQUITECTURA_UNIVERSAL.md`.
+
+| Línea | Efecto | Respuestas |
+|---|---|---|
+| `HELLO` | el módulo se presenta, para que la página se adapte | `HELLO SONAR 2 <fw> <nombre> <modo> <caps>` (`modo` = `BT` o `WIFI`; `caps` = lista con comas sin espacios, p. ej. `ws,stream`, o `-`) |
+| `MODE` | consulta el modo con el que arrancó | `MODE BT` / `MODE WIFI` |
+| `MODE BT` / `MODE WIFI` | pide cambiar de modo; el módulo guarda la preferencia y **reinicia** tras responder (~2 s) | `OK MODE <modo>` · `ERR STORE` si no pudo guardarla · `ERR UNKNOWN` si esta versión no lo soporta |
+| `ARM` | consulta el armado remoto del láser (**solo físico**: ninguna orden lo activa; se pulsa el botón del módulo) | `ARM NOTREQ` (no se exige) · `ARM OFF` · `ARM ON <segundos>` |
+
+- Con armado exigido (modo `WIFI`) y vencido, `(x,y)` y `TEST` responden **`ERR DISARMED`** sin mover nada. `STOP`, `PING`, `HELLO`, `MODE`, `ARM`, `CAL …` y `MARK …` nunca se bloquean.
+- `MODE X` con `X` distinto de `BT`/`WIFI` → `ERR UNKNOWN`; argumentos de más en `HELLO`/`ARM`/`MODE BT WIFI` → `ERR FORMAT`.
+- Líneas de evento no solicitadas (prefijo `EVT `) llegarán con el transporte WebSocket (aún no implementado).

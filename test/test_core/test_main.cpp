@@ -1313,6 +1313,77 @@ static void test_mark_hit_and_miss(void) {
   TEST_ASSERT_FALSE(r.ctrl.busy());
 }
 
+// ---------- Protocolo v2: HELLO, MODE, ARM ----------
+static void test_parse_v2(void) {
+  expectType("hello", core::CmdType::Hello);
+  expectType("HELLO\r\n", core::CmdType::Hello);
+  expectType("arm", core::CmdType::Arm);
+  expectType("MODE", core::CmdType::Mode);
+  TEST_ASSERT_EQUAL_INT(0, core::parseLine("MODE").cmd.mode);
+  TEST_ASSERT_EQUAL_INT(1, core::parseLine("mode bt").cmd.mode);
+  TEST_ASSERT_EQUAL_INT(2, core::parseLine("Mode WiFi").cmd.mode);
+  expectErr("HELLO x", core::ParseError::BadFormat);
+  expectErr("ARM now", core::ParseError::BadFormat);
+  expectErr("MODE FOO", core::ParseError::Unknown);
+  expectErr("MODE BT WIFI", core::ParseError::BadFormat);
+}
+
+static void test_hello_default_and_configured(void) {
+  Rig r;
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("HELLO"), std::string("HELLO SONAR 2 ") + FW_VERSION + " " + DEVICE_NAME + " BT -");
+  core::Controller::Link l;
+  l.mode = "WIFI";
+  l.caps = "ws,stream";
+  r.ctrl.setLink(l);
+  EXPECT_REPLIES(r.send("hello"), std::string("HELLO SONAR 2 ") + FW_VERSION + " " + DEVICE_NAME + " WIFI ws,stream");
+}
+
+static void test_mode_query_and_switch(void) {
+  Rig r;
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("MODE"), "MODE BT");
+  EXPECT_REPLIES(r.send("MODE WIFI"), "ERR UNKNOWN");   // sin manejador configurado (compatibilidad v1)
+  int asked = 0;
+  bool accept = true;
+  core::Controller::Link l;
+  l.requestMode = [&](int m) { asked = m; return accept; };
+  r.ctrl.setLink(l);
+  EXPECT_REPLIES(r.send("MODE WIFI"), "OK MODE WIFI");
+  TEST_ASSERT_EQUAL_INT(2, asked);
+  EXPECT_REPLIES(r.send("mode bt"), "OK MODE BT");
+  TEST_ASSERT_EQUAL_INT(1, asked);
+  accept = false;
+  EXPECT_REPLIES(r.send("MODE WIFI"), "ERR STORE");
+  EXPECT_REPLIES(r.send("MODE"), "MODE BT");   // la consulta no cambia nada
+}
+
+static void test_arm_blocks_remote_fire_but_never_stop(void) {
+  Rig r;
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("ARM"), "ARM NOTREQ");   // v1: no se exige armado
+  EXPECT_REPLIES(r.send("(1,1)"), "OK (1,1)");
+
+  int left = 0;
+  core::Controller::Link l;
+  l.armedSeconds = [&]() { return left; };
+  r.ctrl.setLink(l);
+  EXPECT_REPLIES(r.send("ARM"), "ARM OFF");
+  const size_t before = mark(r);
+  EXPECT_REPLIES(r.send("(5,5)"), "ERR DISARMED");
+  EXPECT_REPLIES(r.send("TEST"), "ERR DISARMED");
+  for (size_t i = before; i < r.log.events.size(); ++i) {   // desarmado: ni servos ni láser se tocan
+    TEST_ASSERT_TRUE_MESSAGE(r.log.events[i].kind != Ev::LaserSet && r.log.events[i].kind != Ev::ServoWrite &&
+                                 r.log.events[i].kind != Ev::ServoAttach, "desarmado no debe mover nada");
+  }
+  EXPECT_REPLIES(r.send("STOP"), "OK STOP");               // STOP, PING, HELLO, CAL y MARK nunca se bloquean
+  EXPECT_REPLIES(r.send("PING"), std::string("PONG ") + DEVICE_NAME + " " + FW_VERSION);
+  EXPECT_REPLIES(r.send("MARK MISS"), "OK MARK");
+  left = 42;
+  EXPECT_REPLIES(r.send("ARM"), "ARM ON 42");
+  EXPECT_REPLIES(r.send("(5,5)"), "OK (5,5)");
+}
+
 static void test_null_reply_is_safe(void) {
   Rig r;
   r.ctrl.begin();
@@ -1384,6 +1455,10 @@ int main() {
   RUN_TEST(test_cal_save_reset_and_persistence);
   RUN_TEST(test_mark_hit_and_miss);
   RUN_TEST(test_null_reply_is_safe);
+  RUN_TEST(test_parse_v2);
+  RUN_TEST(test_hello_default_and_configured);
+  RUN_TEST(test_mode_query_and_switch);
+  RUN_TEST(test_arm_blocks_remote_fire_but_never_stop);
 
   return UNITY_END();
 }

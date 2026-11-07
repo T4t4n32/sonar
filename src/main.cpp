@@ -114,6 +114,11 @@ void setup() {
 
   g_clock.setIdleHook(idleHook);
   g_ctrl.begin();                                     // láser apagado, calibración cargada, servos libres
+  {   // Protocolo v2 (solo HELLO por ahora): el modo real del módulo. Sin cambio de modo ni armado: el comportamiento v1 no varía.
+    core::Controller::Link link;
+    link.mode = g_maintMode ? "WIFI" : "BT";
+    g_ctrl.setLink(link);
+  }
 
   g_links[g_linkCount++] = &g_usb;
   if (g_maintMode) {
