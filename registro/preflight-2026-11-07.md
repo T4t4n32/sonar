@@ -5,8 +5,9 @@ Herramienta: `tools/preflight_publicar.py` (la creó Hermes; corregida hoy). Rep
 > Este informe **reemplaza** el que escribió Hermes, que concluía «LISTO para publicar» con base en un selftest que pasaba por accidente
 > (el escáner se marcaba a sí mismo) y sin detectar nombres propios ni la clave Wi-Fi escrita con `#define`. Correcciones: patrón `#define …PASS "valor"`,
 > autoexclusión, opción `--root` y selftest sobre un repositorio temporal de verdad, y lista local de nombres (`tools/.preflight-nombres.txt`, ignorada por git).
+> **Segunda corrección (misma tarde):** el escaneo del historial usaba `git log -G` con expresiones que Git no entiende (`(?i)`, `\s`, ``) y saltaba casi todo en silencio, y el selftest «detectaba en el historial» porque el secreto seguía en el árbol. Ahora se lee todo el historial una vez y se aplican las mismas reglas de Python a cada línea añadida; el selftest borra el secreto del árbol y exige encontrarlo en un commit.
 
-## Resultado: 0 ALTA · 12 MEDIA · 1 BAJA (el árbol de trabajo y todo el historial)
+## Resultado: 0 ALTA · 18 MEDIA (10 en el árbol, 8 en el historial) · 1 BAJA
 | Sev | Qué | Dónde | Decisión |
 |---|---|---|---|
 | MEDIA | Clave Wi-Fi por defecto `duelo1234` | `include/config.h:11` (y en el historial) | Es solo la clave del Wi-Fi de mantenimiento de cada módulo. Antes de publicar: pasarla a `include/secrets.h` (ignorado) + `secrets.example.h`, y poner otra en el módulo real. **Pendiente (firmware).** |

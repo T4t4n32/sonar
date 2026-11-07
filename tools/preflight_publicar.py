@@ -132,14 +132,19 @@ def scan_file_content(filepath: Path, rel_path: str, commit: str, findings: list
         content = filepath.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return
+    scan_lines(content.splitlines(), rel_path, commit, findings, 1)
 
-    if rel_path.replace("/", "\\").replace("\\", "/") == "tools/preflight_publicar.py":
-        return   # contiene sus propios patrones y datos de prueba: se excluye para no marcarse a sí mismo
-    if rel_path.replace("\\", "/").startswith("registro/preflight-"):
-        return   # los informes de este escáner citan fragmentos censurados: no se re-escanean
 
-    lines = content.splitlines()
-    for i, line in enumerate(lines, 1):
+def _excluido(rel_path: str) -> bool:
+    r = rel_path.replace(chr(92), "/")
+    return r == "tools/preflight_publicar.py" or r.startswith("registro/preflight-")   # contienen patrones y datos de prueba
+
+
+def scan_lines(lines: list[str], rel_path: str, commit: str, findings: list[Finding], start: int = 1) -> None:
+    """Aplica todos los patrones a cada línea (la usan el árbol de trabajo y el historial)."""
+    if _excluido(rel_path):
+        return
+    for i, line in enumerate(lines, start):
         # Patrones de secretos genéricos
         for m in SECRET_PATTERN.finditer(line):
             secret = m.group(3)
@@ -231,94 +236,27 @@ def scan_worktree(findings: list[Finding]) -> None:
 
 
 def scan_git_history(findings: list[Finding]) -> None:
-    """Escanea TODO el historial de git (git rev-list --all) buscando secretos."""
+    """Revisa TODAS las líneas añadidas en TODOS los commits con las mismas reglas que el árbol de trabajo.
+    (Antes usaba `git log -G` con expresiones que Git no entiende y saltaba casi todo en silencio.)"""
     try:
-        # Obtener todos los commits
-        result = subprocess.run(
-            ["git", "rev-list", "--all"],
-            cwd=REPO_ROOT, capture_output=True, text=True, check=True
-        )
-        commits = result.stdout.splitlines()
-    except (subprocess.CalledProcessError, OSError):
+        r = subprocess.run(["git", "log", "--all", "-p", "-U0", "--no-color", "--format=commit %H"], cwd=REPO_ROOT,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", check=True, timeout=300)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        print(f"AVISO: no se pudo leer el historial de git ({type(e).__name__}); el escaneo del historial NO se hizo.", file=sys.stderr)
+        findings.append(Finding("ALTA", "(historial de git)", 0, "-", "no se pudo escanear el historial"))
         return
-
-    # Para cada commit, buscar con git log -p -G
-    # Usamos un enfoque más eficiente: git log -p --all -G<pattern> para cada patrón
-    patterns = [
-        r"(?i)(pass(word)?|pwd|secret|token|api[_-]?key)\s*[=:]\s*[\"'][^\"']{4,}[\"']",
-        r"(?i)WIFI_PASS\w*\s*[=:]\s*[\"']?[^\"'\s]{4,}[\"']?",
-        r"-----BEGIN .* PRIVATE KEY-----",
-        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
-        r"\b3\d{9}\b",
-        r"(?i)(c[eé]dula|c\.c\.|t\.i\.)\s*[#:]*\s*\d{7,10}",
-    ]
-
-    # Si hay nombres en la lista, añadirlos
-    if NAME_LIST:
-        patterns.append(r"\b(" + "|".join(re.escape(n) for n in NAME_LIST) + r")\b")
-
-    # Ejecutar búsqueda combinada con git log -p --all -G
-    # -G busca diferencias que añadan/eliminen el patrón (más preciso que -S)
-    for pattern in patterns:
-        try:
-            result = subprocess.run(
-                ["git", "log", "-p", "--all", "-G", pattern, "--no-color"],
-                cwd=REPO_ROOT, capture_output=True, text=True, check=True, timeout=120
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
-            continue
-
-        # Parsear la salida de git log -p
-        current_commit = ""
-        current_file = ""
-        for line in result.stdout.splitlines():
-            if line.startswith("commit "):
-                current_commit = line.split()[1][:8]
-            elif line.startswith("diff --git"):
-                # diff --git a/path b/path
-                parts = line.split()
-                if len(parts) >= 4:
-                    current_file = parts[3][2:]  # quita b/
-            elif line.startswith("+") and not line.startswith("+++"):
-                # Línea añadida
-                added = line[1:]
-                # Buscar el patrón en la línea añadida
-                scan_added_line(added, current_file, current_commit, findings, pattern)
-
-
-def scan_added_line(line: str, file: str, commit: str, findings: list[Finding], pattern: str) -> None:
-    if file.replace("\\", "/") == "tools/preflight_publicar.py":
-        return
-    """Escanea una línea añadida en el historial contra un patrón específico."""
-    regex = re.compile(pattern)
-    for m in regex.finditer(line):
-        secret = ""
-        sev = "ALTA"
-        snippet = line[:120]
-
-        # Intentar extraer el secreto para censurar
-        if "WIFI_PASS" in pattern:
-            secret = m.group(1) if m.lastindex and m.lastindex >= 1 else m.group(0)
-            sev = "MEDIA" if secret == DEFAULT_WIFI_PASS else "ALTA"
-        elif "PRIVATE KEY" in pattern:
-            secret = "PRIVATE KEY"
-        elif "3\\d{9}" in pattern:
-            secret = m.group(0)
-            sev = "MEDIA"
-        elif "cedula" in pattern.lower() or "c\\.c\\." in pattern.lower() or "t\\.i\\." in pattern.lower():
-            secret = m.group(2) if m.lastindex and m.lastindex >= 2 else m.group(0)
-            sev = "MEDIA"
-        elif NAME_LIST and any(n in pattern for n in NAME_LIST):
-            secret = m.group(0)
-            sev = "MEDIA"
-        else:
-            # Patrón genérico de secretos
-            secret = m.group(3) if m.lastindex and m.lastindex >= 3 else m.group(0)
-
-        if secret and len(secret) >= 4:
-            censored = censor_secret(secret, secret)
-            snippet = line.replace(secret, censored, 1)[:120]
-        findings.append(Finding(sev, file or "?", 0, commit, snippet))
+    commit, archivo, lineno = "", "", 0
+    for line in (r.stdout or "").splitlines():
+        if line.startswith("commit ") and len(line) == 47:
+            commit = line.split()[1][:8]
+        elif line.startswith("diff --git"):
+            archivo = line.split(" b/", 1)[-1] if " b/" in line else ""
+        elif line.startswith("@@"):
+            m = re.search(r"[+]([0-9]+)", line)
+            lineno = int(m.group(1)) if m else 0
+        elif line.startswith("+") and not line.startswith("+++"):
+            scan_lines([line[1:]], archivo, commit, findings, lineno)
+            lineno += 1
 
 
 def deduplicate_findings(findings: list[Finding]) -> list[Finding]:
@@ -377,6 +315,9 @@ def run_selftest() -> int:
         secret_file.write_text('api_key = "SUPER_SECRET_KEY_12345"\n')
         subprocess.run(["git", "add", "secret.txt"], cwd=repo, capture_output=True, check=True)
         subprocess.run(["git", "commit", "-m", "Add secret"], cwd=repo, capture_output=True, check=True)
+        # Se borra: el secreto queda SOLO en el historial (así se prueba de verdad el escaneo del historial)
+        subprocess.run(["git", "rm", "-q", "secret.txt"], cwd=repo, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Remove secret"], cwd=repo, capture_output=True, check=True)
 
         # Ejecutar preflight sobre el repo temporal
         # Copiar el script al repo temporal para que lo use
@@ -404,7 +345,7 @@ def run_selftest() -> int:
 
         # Verificar que detectó el secreto
         alta_findings = [f for f in findings if f["severity"] == "ALTA"]
-        secret_found = any("SUPER_SECRET" in f["snippet"] or "API_KEY" in f["snippet"].upper() for f in alta_findings)
+        secret_found = any(f["commit"] != "WORKTREE" and ("SUPER" in f["snippet"] or "API_KEY" in f["snippet"].upper()) for f in alta_findings)
 
         if not secret_found:
             print("FAIL: no detectó el secreto plantado")
