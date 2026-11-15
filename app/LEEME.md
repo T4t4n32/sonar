@@ -1,124 +1,41 @@
-# SONAR — Android Wrapper (Capacitor)
+# SONAR · app Android (Vite + Preact + TypeScript + Capacitor 8)
 
-Empaqueta la interfaz web `../web/index.html` como APK Android usando **Capacitor v8**.
-Esta versión **solo envuelve la web**; el transporte Bluetooth real se añade después.
+APK nativa de Batalla Naval. La UI se compila con Vite a `www/` y Capacitor la empaqueta (funciona offline).
+Plan y arquitectura: `../docs/03-firmware-y-app/APP_SONAR.md`.
 
----
+## Requisitos
+- Node >= 18 y npm; Python >= 3.10 (build) y `uv` (solo para regenerar iconos).
+- **JDK = JBR de Android Studio**: `C:\Program Files\Android\Android Studio\jbr` (el `java` del PATH es 1.8 y no sirve). Otra ruta: variable `SONAR_JAVA_HOME`.
+- Android SDK en `%LOCALAPPDATA%\Android\Sdk` (platform 36, build-tools 36.x). Otra ruta: `ANDROID_HOME`.
+- Primera vez: `npm install`. (`android/` ya está generado; no hace falta `cap add`.)
 
-## Requisitos previos
-
-| Herramienta | Versión / Ruta | Notas |
-|-------------|----------------|-------|
-| **Node.js** | ≥ 18 (LTS) | `node -v` |
-| **npm** | ≥ 9 | `npm -v` |
-| **Python** | ≥ 3.8 | `python --version` |
-| **JDK** | JBR de Android Studio | `JAVA_HOME=C:\Program Files\Android\Android Studio\jbr` |
-| **Android SDK** | `<usuario>\AppData\Local\Android\Sdk` | `ANDROID_HOME` apuntando aquí |
-| **Build Tools** | 36.x (en SDK) | `aapt2` para verificación final |
-
-> **Importante:** El `java` del PATH del sistema es 1.8 y **no sirve**. Usa el JBR de Android Studio:
-> ```cmd
-> set JAVA_HOME=C:\Program Files\Android\Android Studio\jbr
-> set PATH=%JAVA_HOME%\bin;%PATH%
-> ```
-
----
-
-## Estructura del proyecto
-
+## Compilar
 ```
-app/
-├── package.json           # Dependencias Capacitor v8 + plugin Bluetooth
-├── capacitor.config.ts    # appId: com.sonar.batallanaval, webDir: www
-├── sync-web.py            # Copia ../web/index.html → www/index.html
-├── www/                   # Generado por sync-web.py (no versionar)
-├── android/               # Generado por `npx cap add android`
-└── dist-apk/              # APK final (creado al compilar)
+npm run apk                 # tsc + vite build -> cap sync -> gradlew assembleDebug -> dist-apk/
+npm run apk -- --skip-typecheck   # sin tsc (si otro módulo está a medias)
+npm run apk -- --no-web           # reutiliza www/ tal cual
 ```
+Resultado: `dist-apk/SONAR-<versión>-debug.apk` (versión = `package.json`; `versionCode = major*10000 + minor*100 + patch`).
+El script fija JAVA_HOME/ANDROID_HOME y al final imprime el resumen de `aapt2 dump badging`.
 
----
-
-## Comandos para reconstruir (orden exacto)
-
-```cmd
-cd I:\repository\Batalla Naval - Sonar\sonar\app
-
-# 1. Instalar dependencias (una sola vez)
-npm install
-
-# 2. Añadir plataforma Android (una sola vez)
-npx cap add android
-
-# 3. Sincronizar la web actual al proyecto Android
-python sync-web.py
-npx cap sync android
-
-# 4. Compilar APK debug
-cd android
-gradlew.bat assembleDebug
+## Instalar en el celular
 ```
-
-El APK resultante estará en:
+adb devices
+adb install -r dist-apk\SONAR-0.1.0-debug.apk
 ```
-app/android/app/build/outputs/apk/debug/app-debug.apk
-```
-Se copia a `app/dist-apk/SONAR-0.0.1-debug.apk` como entrega final.
+(o `npm run apk -- --install`). Al abrir, la app pide los permisos de Bluetooth (Android 12+: Dispositivos cercanos).
+El módulo ESP32 debe estar **emparejado antes** en Ajustes › Bluetooth (`SONAR-A` / `SONAR-B`).
 
----
+## Piezas nativas
+| Qué | Dónde |
+|---|---|
+| Permisos, orientación vertical, tema oscuro, etiqueta «SONAR» | `android/app/src/main/AndroidManifest.xml`, `res/values/styles.xml` |
+| HTTP en claro **solo** a 192.168.4.1 (Wi-Fi mantenimiento) | `res/xml/network_security_config.xml` + `CapacitorHttp` en `capacitor.config.ts` |
+| Plugin local `SonarBt` (permisos BT en runtime, lista de emparejados, encender BT, atar a Wi-Fi) | `android/.../SonarBtPlugin.java`, registrado en `MainActivity.java` |
+| Versión | `android/app/build.gradle` lee `package.json` |
+| Icono adaptativo + monocromo + legacy | `npm run icons` (`tools/make_icons.py`, Pillow) |
+| Splash oscuro sin parpadeo | `res/values/styles.xml` + `res/drawable/splash_icon.xml` |
 
-## Verificación del APK
-
-```cmd
-# Ver package name y permisos
-"%ANDROID_HOME%\build-tools\36.0.0\aapt2.exe" dump badging app/dist-apk/SONAR-0.0.1-debug.apk
-```
-
-Salida esperada (fragmento):
-```
-package: name='com.sonar.batallanaval' versionCode='1' versionName='0.0.1'
-...
-uses-permission: name='android.permission.BLUETOOTH'
-uses-permission: name='android.permission.BLUETOOTH_ADMIN'
-uses-permission: name='android.permission.BLUETOOTH_CONNECT'
-uses-permission: name='android.permission.BLUETOOTH_SCAN'
-uses-permission: name='android.permission.ACCESS_FINE_LOCATION'
-uses-permission: name='android.permission.INTERNET'
-```
-
----
-
-## Qué falta (próximos pasos)
-
-1. **Transporte Bluetooth real**: La web usa `fetch('/cmd?l=...')` hacia Wi-Fi (ESP32). Hay que:
-   - Exponer una API Capacitor (`BluetoothSerial` del plugin `@e-is/capacitor-bluetooth-serial`).
-   - Inyectar un *bridge* en `www/index.html` que redirija `send()`/`cmd()` al plugin nativo.
-   - Manejar permisos de runtime (`BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN`) en `MainActivity`.
-
-2. **Iconos y splash**: Generar `mipmap/ic_launcher` y `drawable/splash` con `npx cap sync` tras añadir recursos en `android/app/src/main/res/`.
-
-3. **Firma de release**: Configurar `keystore.properties` (fuera de git) y `signingConfigs.release` en `android/app/build.gradle` cuando se vaya a Play Store.
-
-4. **Pruebas en dispositivo real**: El emulador no tiene Bluetooth clásico; probar en físico.
-
----
-
-## Notas sobre el plugin Bluetooth
-
-- Plugin: `@e-is/capacitor-bluetooth-serial@6.0.3` (última compatible con Capacitor 6; se usa en Capacitor 8 *as-is*).
-- Declara en su `AndroidManifest`:
-  - `BLUETOOTH`, `BLUETOOTH_ADMIN` (maxSdkVersion 30)
-  - `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN` (tools:targetApi="s")
-  - `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`
-- **Este wrapper añade** en `app/src/main/AndroidManifest.xml`:
-  - `BLUETOOTH_SCAN` con `usesPermissionFlags="neverForLocation"` (evita pedir ubicación en Android 12+).
-  - `ACCESS_FINE_LOCATION` con `maxSdkVersion="30"` (solo legacy).
-
----
-
-## Limpieza
-
-```cmd
-cd app\android
-gradlew.bat clean
-gradlew.bat --stop
-```
+## Transportes (`src/transport/`)
+`BluetoothTransport` (SPP), `WifiTransport` (HTTP `/cmd?l=`), `SimTransport` (otro agente). Framing/cola puros en `framing.ts`.
+Pruebas: `npx vitest run src/transport`. Lo que NO se puede probar sin ESP32: ver informe de entrega.

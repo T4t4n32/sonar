@@ -4,7 +4,7 @@ Solo biblioteca estándar de Python 3 (`python`). `pyserial` es opcional (ver `r
 
 | Archivo | Qué es |
 |---|---|
-| `fake_device.py` | Módulo **simulado**: sirve `web/index.html` y el protocolo de `docs/PROTOCOLO.md` por HTTP (y TCP opcional). |
+| `fake_device.py` | Módulo **simulado**: sirve `web/index.html` y el protocolo de `docs/03-firmware-y-app/PROTOCOLO.md` por HTTP (y TCP opcional). |
 | `sim_phone.py` | "Celular" de línea de comandos: `fire`, `test`, `ping`, `raw` y `selftest`. |
 | `requirements.txt` | `pyserial`, solo para `sim_phone.py --serial`. |
 

@@ -28,3 +28,5 @@ dist-apk/*.apk
 # OS
 .DS_Store
 Thumbs.db
+# Generado por Vite
+www/

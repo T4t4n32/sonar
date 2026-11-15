@@ -1,23 +1,31 @@
 {
   "name": "sonar-app",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "SONAR — Batalla Naval Android wrapper",
   "scripts": {
-    "cap:add": "npx cap add android",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "cap:sync": "npx cap sync android",
-    "cap:open": "npx cap open android",
-    "build:apk": "cd android && gradlew.bat assembleDebug",
-    "sync:web": "python sync-web.py"
+    "apk": "python tools/build_apk.py",
+    "icons": "uv run --with pillow tools/make_icons.py"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",
     "@capacitor/core": "^8.6.0",
-    "@e-is/capacitor-bluetooth-serial": "^6.0.3"
+    "@e-is/capacitor-bluetooth-serial": "^6.0.3",
+    "@preact/signals": "^2.11.4",
+    "preact": "^11.2.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.0",
-    "typescript": "^7.0.2"
+    "@preact/preset-vite": "^2.10.6",
+    "jsdom": "^31.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   }
 }

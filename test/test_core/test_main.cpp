@@ -1210,7 +1210,7 @@ static void test_ping(void) {
   const std::string expected = std::string("PONG ") + DEVICE_NAME + " " + FW_VERSION;
   EXPECT_REPLIES(r.send("PING"), expected);
   EXPECT_REPLIES(r.send("ping\r\n"), expected);
-  TEST_ASSERT_EQUAL_STRING("PONG DUELO-A 0.1.0", expected.c_str());   // valores por defecto de config.h
+  TEST_ASSERT_EQUAL_STRING("PONG SONAR-A 0.1.0", expected.c_str());   // valores por defecto de config.h
 }
 
 static void test_cal_show_and_set(void) {

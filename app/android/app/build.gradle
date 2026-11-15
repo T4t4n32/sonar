@@ -1,5 +1,9 @@
 apply plugin: 'com.android.application'
 
+// versionName y versionCode salen de package.json (única fuente): 0.1.0 -> code 100 (major*10000 + minor*100 + patch)
+def pkg = new groovy.json.JsonSlurper().parseText(file('../../package.json').text)
+def (vMajor, vMinor, vPatch) = pkg.version.tokenize('.-')[0..2].collect { it as int }
+
 android {
     namespace = "com.sonar.batallanaval"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +11,8 @@ android {
         applicationId "com.sonar.batallanaval"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode vMajor * 10000 + vMinor * 100 + vPatch
+        versionName pkg.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

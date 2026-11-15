@@ -2,8 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 /**
  * Empaquetado Android (APK) para SONAR.
- * La web va en app/www/ (copiada desde ../web/index.html por sync-web.py).
- * webDir = 'www' → el APK incluye la web y funciona offline.
+ * La app se compila con Vite a app/www/ (npm run build) y el APK la incluye: funciona offline.
  */
 const config: CapacitorConfig = {
   appId: 'com.sonar.batallanaval',
@@ -15,10 +14,9 @@ const config: CapacitorConfig = {
     backgroundColor: '#040a0f',
   },
   plugins: {
-    BluetoothSerial: {
-      // El plugin @e-is/capacitor-bluetooth-serial declara sus permisos en su plugin.xml.
-      // Si faltrasen, se añaden manualmente en android/app/src/main/AndroidManifest.xml (ver paso 4).
-    },
+    // HTTP nativo: el WebView sirve la app por https y bloquea http:// (contenido mixto);
+    // con esto el transporte Wi-Fi (http://192.168.4.1) sale por HttpURLConnection.
+    CapacitorHttp: { enabled: true },
   },
 }
 

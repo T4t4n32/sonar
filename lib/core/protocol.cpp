@@ -1,4 +1,4 @@
-// Analizador del protocolo de líneas de texto (docs/PROTOCOLO.md). PURO C++ (sin Arduino).
+// Analizador del protocolo de líneas de texto (docs/03-firmware-y-app/PROTOCOLO.md). PURO C++ (sin Arduino).
 #include "protocol.h"
 
 #include <stdio.h>

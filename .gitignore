@@ -5,3 +5,6 @@ __pycache__/
 .venv/
 tools/.preflight-nombres.txt
 registro/*.json
+
+# Obsidian abre carpetas sueltas
+.obsidian/

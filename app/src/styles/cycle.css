@@ -1,0 +1,110 @@
+/* ===== Ciclo de disparo: vuelo, veredicto, gota, explosión, ubicar el barco, hundido ===== */
+/* Solo transform/opacity y degradados; sin blur ni filtros (celulares de gama baja). */
+
+html.cyc-lock,html.cyc-lock body{overflow:hidden}
+.toast{z-index:95}
+
+/* ---------- escenario del radar ---------- */
+#radarCard{position:relative}
+.cyc-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+.svg .beam,.fx .ring{display:none} /* el haz y los anillos ahora los dibuja el canvas */
+.field.shake{animation:shake .34s linear}
+@keyframes shake{0%,100%{transform:none}12%{transform:translate(-4px,2px)}28%{transform:translate(4px,-3px)}44%{transform:translate(-3px,-2px)}60%{transform:translate(3px,3px)}78%{transform:translate(-2px,1px)}}
+
+.c.kship::before{background:color-mix(in srgb,var(--echo) 22%,transparent)}
+.c.kship{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--echo) 70%,transparent)}
+.c.ploc{box-shadow:inset 0 0 0 2px var(--warn);animation:tgt .9s ease-in-out infinite}
+.c.dup{z-index:5;animation:dup .5s ease-in-out 3}
+@keyframes dup{0%,100%{box-shadow:inset 0 0 0 2px var(--warn);transform:none}50%{box-shadow:inset 0 0 0 3px var(--warn),0 0 14px var(--warn);transform:scale(1.7)}}
+
+.cyc-cancel{position:absolute;left:14px;right:14px;top:50px;z-index:9;display:grid;gap:2px;padding:9px 12px;border:1px solid var(--line2);border-left:4px solid var(--warn);border-radius:12px;background:var(--panel2);font-size:.82rem;text-align:left;pointer-events:none;animation:cancelin 1.4s var(--ease-out) forwards}
+.cyc-cancel b{font-size:.66rem;letter-spacing:.18em;color:var(--warn)}
+@keyframes cancelin{0%{opacity:0;transform:translateY(-6px)}12%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+
+/* ---------- marcador de flota ---------- */
+.fmark{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.fmark>div{display:grid;grid-template-columns:1fr auto;grid-template-areas:"pips num" "lab lab";align-items:center;gap:2px 8px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--panel);min-width:0}
+.fmark b{grid-area:num;font:800 1.4rem/1 var(--mono)}
+.fmark small{grid-area:lab;font-size:.6rem;letter-spacing:.1em;color:var(--mut);text-transform:uppercase;line-height:1.1}
+.pips{grid-area:pips;display:flex;gap:4px}
+.pip{width:13px;height:13px;border-radius:4px;background:var(--echo);transition:transform .3s var(--ease-out),opacity .3s}
+.pip.s{width:21px;background:var(--sonar)}
+.pip.dead{background:transparent;border:2px solid var(--hit);opacity:.75;transform:scale(.86)}
+
+/* ---------- hoja del veredicto ---------- */
+.vsheet{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:12px 12px calc(12px + env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:0 -22px 50px -14px rgba(0,0,0,.75);animation:slide .26s var(--ease-out)}
+.vin{max-width:560px;margin:0 auto;display:grid;gap:10px}
+.vhead{display:flex;align-items:center;gap:12px}
+.stop.vstop{min-height:48px;padding:0 16px;font-size:.88rem;flex:none}
+.vq{margin-left:auto;text-align:right}
+.vq small{display:block;font-size:.6rem;letter-spacing:.22em;color:var(--warn);font-weight:800}
+.vq b{font:800 2rem/1.05 var(--mono)}
+.vask{margin:0;text-align:center;color:var(--mut);font-size:.86rem}
+.vbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.vbtns.two{grid-template-columns:1.3fr 1fr}
+.vb{min-height:136px;border:0;border-radius:20px;display:grid;place-items:center;align-content:center;gap:8px;font-weight:900;font-size:1.3rem;letter-spacing:.05em;cursor:pointer;transition:transform .12s var(--ease-out)}
+.vb:active{transform:scale(.96)}
+.vb svg{width:48px;height:48px;fill:currentColor}
+.vb .hl{fill:none;stroke:#02222e;stroke-width:3;stroke-linecap:round}
+.vb.yes{background:var(--hit);color:#1b0502;box-shadow:0 12px 30px -14px var(--hit)}
+.vb.no{background:var(--echo);color:#02222e;box-shadow:0 12px 30px -14px var(--echo)}
+.vb.ghostb{background:transparent;border:1px solid var(--line2);color:var(--txt);font-size:1rem;min-height:110px}
+.vconf p{margin:0 0 10px;text-align:center;font-size:.92rem}
+.vconf .vb{min-height:110px;font-size:1.05rem}
+
+/* ---------- Ubica el barco ---------- */
+.loc{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 10px calc(12px + env(safe-area-inset-bottom));background:var(--bg);overflow:hidden;animation:rise .25s var(--ease-out)}
+.lochead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.lochead small{display:block;font-size:.64rem;letter-spacing:.24em;color:var(--warn);font-weight:800}
+.lochead b{font:800 1.3rem var(--mono)}
+.locask{margin:0;color:var(--mut);font-size:.82rem;line-height:1.3}
+.locfield{width:100%;max-width:min(560px,calc(100dvh - 292px));padding-left:1.5rem}
+.loc .xlab,.loc .ylab{font-size:10px}
+.loc .bw{cursor:crosshair}
+.loc .c.kship::before{background:color-mix(in srgb,var(--echo) 38%,transparent)}
+.loc .c.hitnow{z-index:3;box-shadow:inset 0 0 0 2px var(--hit);animation:hitnow .7s ease-in-out infinite}
+@keyframes hitnow{0%,100%{box-shadow:inset 0 0 0 2px var(--hit),0 0 0 0 transparent}50%{box-shadow:inset 0 0 0 2px var(--hit),0 0 14px 2px var(--hit)}}
+.c.pv{z-index:4}
+.c.pv.ok{background:var(--sonar);box-shadow:0 0 0 1px var(--sonar),0 0 12px var(--glow)}
+.c.pv.bad{background:var(--hit);box-shadow:0 0 0 1px var(--hit),0 0 12px color-mix(in srgb,var(--hit) 55%,transparent)}
+.c.pv::before{display:none}
+.loclabel{display:grid;gap:2px;place-items:center;min-height:3.5em;padding:8px 12px;border:1px solid var(--line);border-radius:14px;text-align:center;font-size:.84rem;color:var(--mut);transition:border-color .15s,color .15s}
+.loclabel b{font:800 1.05rem var(--mono);color:var(--txt)}
+.loclabel.ok{border-color:var(--sonar);color:var(--sonar)}.loclabel.ok b{color:var(--sonar)}
+.loclabel.bad{border-color:var(--hit);color:var(--hit)}.loclabel.bad b{color:var(--hit)}
+.locbtns{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:8px;margin-top:auto}
+.locbtns .btn{font-size:.8rem;padding:0 6px;line-height:1.1;min-height:56px}
+.btn.big{min-height:64px!important;font-size:1.25rem!important;letter-spacing:.1em}
+
+/* ---------- ¡HUNDIDO! ---------- */
+.sunkov{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:20px;background:color-mix(in srgb,var(--bg) 84%,transparent);animation:fade .25s ease-out}
+.sunk-in{display:grid;gap:8px;justify-items:center;text-align:center;width:min(92vw,380px)}
+.sunk-stage{position:relative;width:100%;height:170px;overflow:hidden}
+.sunk-ship{position:absolute;left:50%;top:14px;width:230px;margin-left:-115px;animation:sink 2.3s cubic-bezier(.45,0,.75,.35) forwards}
+.sunk-ship.boat{width:170px;margin-left:-85px}
+.sunk-ship svg{display:block;width:100%;height:auto;fill:color-mix(in srgb,var(--echo) 32%,transparent);stroke:var(--echo);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
+.sunk-ship svg .hl{fill:var(--sonar);stroke:none}.sunk-ship svg .mast{fill:none}
+@keyframes sink{0%{transform:translateY(-8px) rotate(0)}22%{transform:translateY(0) rotate(-3deg)}100%{transform:translateY(150px) rotate(-20deg)}}
+.sunk-water{position:absolute;left:0;right:0;top:86px;bottom:0;border-top:2px solid var(--echo);background:linear-gradient(color-mix(in srgb,var(--echo) 26%,transparent),color-mix(in srgb,var(--echo) 6%,transparent))}
+.sunk-water i{position:absolute;bottom:-12px;left:calc(14% + var(--i)*11%);width:calc(6px + var(--i)*1px);height:calc(6px + var(--i)*1px);border-radius:50%;border:2px solid var(--echo);opacity:0;animation:bubble 1.7s ease-out infinite;animation-delay:calc(var(--i)*.22s)}
+@keyframes bubble{0%{opacity:0;transform:translateY(0)}20%{opacity:.9}100%{opacity:0;transform:translateY(-76px)}}
+.sunkov h2{margin:0;font-size:2.5rem;letter-spacing:.1em;color:var(--hit);animation:pop .5s var(--ease-out) both}
+@keyframes pop{0%{opacity:0;transform:scale(.5)}60%{transform:scale(1.12)}100%{opacity:1;transform:none}}
+.sunk-name{margin:0;font:800 1.1rem var(--mono)}
+.sunk-left{margin:0;color:var(--mut);font-size:.88rem}.sunk-left b{color:var(--txt);font-family:var(--mono)}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+
+/* ---------- victoria ---------- */
+.overlay.won .box{position:relative;z-index:1}
+.overlay.won h2{animation:pop .6s var(--ease-out) both}
+.confetti{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.confetti i{position:absolute;top:-16px;left:calc(var(--i)*6.2%);width:8px;height:14px;border-radius:2px;background:hsl(calc(var(--i)*23) 90% 60%);animation:conf 2.6s linear infinite;animation-delay:calc(var(--i)*-.17s)}
+@keyframes conf{to{transform:translateY(112vh) rotate(560deg)}}
+
+@media (prefers-reduced-motion:reduce){
+  .field.shake,.c.dup,.c.ploc,.loc .c.hitnow,.sunk-water i,.confetti i{animation:none}
+  .sunk-ship{animation:none;transform:translateY(60px)}
+  .sunkov h2,.overlay.won h2,.vsheet,.loc,.sunkov,.cyc-cancel{animation:none}
+  .cyc-cancel{opacity:1}
+  .confetti{display:none}
+}

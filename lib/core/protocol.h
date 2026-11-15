@@ -1,5 +1,5 @@
 #pragma once
-// Protocolo de líneas de texto (ver docs/PROTOCOLO.md). PURO C++ (sin Arduino). Contrato compartido.
+// Protocolo de líneas de texto (ver docs/03-firmware-y-app/PROTOCOLO.md). PURO C++ (sin Arduino). Contrato compartido.
 #include <string>
 
 namespace core {

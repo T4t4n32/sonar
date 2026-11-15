@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #ifndef DEVICE_NAME
-#define DEVICE_NAME "DUELO-A"
+#define DEVICE_NAME "SONAR-A"
 #endif
 #ifndef WIFI_SSID_MAINT
 #define WIFI_SSID_MAINT "DUELO-A-MANT"

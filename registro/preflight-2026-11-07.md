@@ -11,8 +11,8 @@ Herramienta: `tools/preflight_publicar.py` (la creó Hermes; corregida hoy). Rep
 | Sev | Qué | Dónde | Decisión |
 |---|---|---|---|
 | MEDIA | Clave Wi-Fi por defecto `duelo1234` | `include/config.h:11` (y en el historial) | Es solo la clave del Wi-Fi de mantenimiento de cada módulo. Antes de publicar: pasarla a `include/secrets.h` (ignorado) + `secrets.example.h`, y poner otra en el módulo real. **Pendiente (firmware).** |
-| MEDIA | Nombres completos de los dos autores | `docs/GUIDA_DESVIO.md`, `docs/PROPUESTA_TABLERO_LDR.md`, bloque de título de `docs/PLANO_CARCASA_SONAR.pdf` y `tools/gen_plano_carcasa.py`; también en commits `0cf72ee` y `6d796ea` | **Decisión de Sebas y Jader** (autoría pública o iniciales). Ya estuvieron 3 días en un repositorio público con 15 clonaciones únicas: no se pueden retirar las copias. |
-| MEDIA | `W@ie****` en el PDF del plano | `docs/PLANO_CARCASA_SONAR.pdf:123` | Probable falso positivo (texto binario del PDF); revisar a ojo. |
+| MEDIA | Nombres completos de los dos autores | `docs/00-proyecto/GUIA_DE_PROCESO.md`, `docs/02-electronica/PROPUESTA_TABLERO_LDR.md`, bloque de título de `docs/01-diseno/planos/PLANO_CARCASA_SONAR.pdf` y `tools/gen_plano_carcasa.py`; también en commits `0cf72ee` y `6d796ea` | **Decisión de Sebas y Jader** (autoría pública o iniciales). Ya estuvieron 3 días en un repositorio público con 15 clonaciones únicas: no se pueden retirar las copias. |
+| MEDIA | `W@ie****` en el PDF del plano | `docs/01-diseno/planos/PLANO_CARCASA_SONAR.pdf:123` | Probable falso positivo (texto binario del PDF); revisar a ojo. |
 | BAJA | Ruta de Windows con usuario | `app/LEEME.md:16` | Cambiar por `<usuario>`. |
 
 No hay claves privadas, tokens, `.jks`, `.env` ni archivos de más de 5 MB.

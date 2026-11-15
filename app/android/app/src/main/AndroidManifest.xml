@@ -4,8 +4,9 @@
 
     <application
         android:allowBackup="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="SONAR"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
@@ -13,7 +14,8 @@
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
-            android:label="@string/title_activity_main"
+            android:label="SONAR"
+            android:screenOrientation="portrait"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
             android:exported="true">
@@ -36,28 +38,24 @@
         </provider>
     </application>
 
-    <!-- Permissions -->
+    <!-- Hardware opcional: la app abre en equipos sin Bluetooth (modo simulado / Wi-Fi) -->
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+
+    <!-- Permisos -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Bluetooth clásico (legacy, ≤ API 30) -->
-    <uses-permission
-        android:name="android.permission.BLUETOOTH"
-        android:maxSdkVersion="30" />
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_ADMIN"
-        android:maxSdkVersion="30" />
+    <!-- Bluetooth clásico (legacy, <= API 30) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
-    <!-- Bluetooth moderno (API 31+) -->
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_CONNECT"
-        tools:targetApi="s" />
-    <uses-permission
-        android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation"
-        tools:targetApi="s" />
+    <!-- Bluetooth moderno (API 31+): se piden en tiempo de ejecución (SonarBtPlugin.ensurePermissions) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" tools:targetApi="s" />
 
-    <!-- Ubicación precisa solo para ≤ API 30 (en API 31+ no se necesita si BLUETOOTH_SCAN tiene neverForLocation) -->
-    <uses-permission
-        android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30" />
+    <!-- Ubicación solo para buscar dispositivos en API <= 30; el plugin serial la declara sin tope: se lo ponemos -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" tools:node="replace" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
 </manifest>

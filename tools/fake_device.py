@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Módulo SIMULADO de SONAR (solo biblioteca estándar).
 
-Implementa docs/PROTOCOLO.md en dos transportes:
+Implementa docs/03-firmware-y-app/PROTOCOLO.md en dos transportes:
   * HTTP: GET /         -> web/index.html
           GET /cmd?l=.. -> respuesta en texto plano, una línea por respuesta
   * TCP:  (opcional, --tcp PUERTO) líneas crudas terminadas en salto de línea
@@ -36,7 +36,7 @@ from urllib.parse import parse_qs, urlsplit
 
 REPO = Path(__file__).resolve().parent.parent
 
-# ---- Constantes: espejo de include/config.h y docs/PROTOCOLO.md
+# ---- Constantes: espejo de include/config.h y docs/03-firmware-y-app/PROTOCOLO.md
 DEVICE_NAME = "DUELO-FAKE"
 FW_VERSION = "0.1.0"
 GRID_N = 20
@@ -109,7 +109,7 @@ def parse_line(raw: str) -> Parsed:
     head, args = words[0].upper(), words[1:]
     if head in ("TEST", "STOP", "PING"):
         return Parsed(kind=head) if not args else Parsed(err="FORMAT")
-    if head in ("HELLO", "ARM"):  # protocolo v2 (docs/PROTOCOLO.md)
+    if head in ("HELLO", "ARM"):  # protocolo v2 (docs/03-firmware-y-app/PROTOCOLO.md)
         return Parsed(kind=head) if not args else Parsed(err="FORMAT")
     if head == "MODE":
         if not args:

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#040a0f">
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<title>SONAR · Batalla Naval</title>
+<style>
+/* Splash: CSS mínimo y en línea para pintarse en el primer fotograma (solo transform/opacity). */
+html{background:#040a0f}
+#splash{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(90% 55% at 50% 42%,#0b2230,#040a0f 70%);color:#d9f3ee;font:16px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;transition:opacity .3s ease-out;touch-action:manipulation;cursor:pointer}
+#splash.out{opacity:0;pointer-events:none}
+#splash svg{width:132px;height:132px;overflow:visible}
+#splash .a{fill:none;stroke:#46f0b5;stroke-width:1.4;stroke-linecap:round}
+#splash .rg{fill:none;stroke:#46f0b5;stroke-width:1;opacity:.3;transform-box:fill-box;transform-origin:center;animation:spPing calc(1.6s / var(--ispd,1)) cubic-bezier(.23,1,.32,1) both}
+#splash .rg.b{animation-delay:calc(.25s / var(--ispd,1))}
+#splash .rg.c{animation-delay:calc(.5s / var(--ispd,1))}
+#splash .sw{transform-box:view-box;transform-origin:50% 50%;animation:spSw calc(1.6s / var(--ispd,1)) linear both}
+#splash .ct{fill:#46f0b5;transform-box:fill-box;transform-origin:center;animation:spPop calc(.5s / var(--ispd,1)) cubic-bezier(.23,1,.32,1) both}
+#splash .t{font-size:1.7rem;font-weight:800;letter-spacing:.38em;margin-right:-.38em;animation:spRise calc(.7s / var(--ispd,1)) cubic-bezier(.23,1,.32,1) calc(.45s / var(--ispd,1)) both}
+#splash .s{color:#86adae;font-size:.74rem;letter-spacing:.3em;margin-right:-.3em;animation:spRise calc(.7s / var(--ispd,1)) cubic-bezier(.23,1,.32,1) calc(.7s / var(--ispd,1)) both}
+@keyframes spPing{0%{opacity:.9;transform:scale(.15)}100%{opacity:0;transform:scale(3.6)}}
+@keyframes spSw{from{transform:rotate(-200deg);opacity:0}25%{opacity:1}to{transform:rotate(160deg);opacity:.9}}
+@keyframes spPop{from{opacity:0;transform:scale(0)}to{opacity:1;transform:none}}
+@keyframes spRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#splash *{animation:none!important}#splash .sw{opacity:.9}}
+</style>
+</head>
+<body>
+<div id="splash" aria-hidden="true">
+  <svg viewBox="0 0 32 32">
+    <circle class="rg" cx="16" cy="16" r="13"/><circle class="rg b" cx="16" cy="16" r="13"/><circle class="rg c" cx="16" cy="16" r="13"/>
+    <circle class="a" cx="16" cy="16" r="13" opacity=".4"/><circle class="a" cx="16" cy="16" r="8.5" opacity=".65"/>
+    <g class="sw"><path d="M16 16 16 3A13 13 0 0 1 27.3 9.5Z" fill="#46f0b5" opacity=".28"/><path class="a" d="M16 16 16 3"/></g>
+    <circle class="ct" cx="16" cy="16" r="2.2"/>
+  </svg>
+  <div class="t">SONAR</div>
+  <div class="s">BATALLA NAVAL</div>
+</div>
+<div id="app"></div>
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
