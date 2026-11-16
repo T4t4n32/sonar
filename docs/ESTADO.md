@@ -25,6 +25,7 @@ Consecuencias: **no hacen falta sensores por casilla** (ni matriz LDR ni fotodet
 | Servos | **MG996R ×2 por módulo** (pan y tilt) + repuestos | 7-nov | [LISTA_MERCADOLIBRE](04-compras/LISTA_MERCADOLIBRE.md) |
 | Compras | Mercado Libre / tiendas colombianas, **nada de China** (llega tarde) | 7-nov | idem |
 | Publicación | Repositorio **privado** hasta el 24-nov; publicación programada ese día a las 20:00 (`tools/publicar.py`) | 7-nov | [LICENCIAS](05-publicacion/LICENCIAS.md) |
+| Matriz LED decorativa | **Diferida.** GPIO4 reservado (WS2812B, solo decorativa), sin código. Prioridad: lo que sí califica primero (test 5/5, app, contrincante); la matriz solo si sobra tiempo tras el 20-nov | 15-nov | [PINOUT](02-electronica/PINOUT.md) |
 
 ## 3. Conflictos entre fuentes (resueltos aquí)
 | Tema | Antes (3-nov, vault) | Ahora |
@@ -49,7 +50,9 @@ Consecuencias: **no hacen falta sensores por casilla** (ni matriz LDR ni fotodet
 | **mar 24-nov** | Entrega y demostración · 20:00 publicación programada del repositorio |
 
 ## 5. Estado técnico (verificado)
-Núcleo: **52/52** pruebas nativas · simulador: selftest **24/24** · web: e2e **29/29** (capturas en [`registro/`](../registro/)) · firmware `modulo_a` compila (flash 51,4 %) · **app SONAR 0.1.0** (`app/`, Vite+Preact+TS+Capacitor): núcleo 160 pruebas + transportes/STOP urgente + store 27 = **189 Vitest**, e2e de la app 42/42 con módulo simulado, APK debug 4,3 MB compilado; **Bluetooth real sin probar, APK sin instalar**; firmware anuncia `SONAR-A`/`SONAR-B` · concepto 3D del maletín en [`cad/`](../cad/LEEME.md) (modelo SolidWorks **a medias**). **Nada probado aún en un ESP32 real ni en celulares.**
+Núcleo: **52/52** pruebas nativas · simulador: selftest **24/24** · web: e2e **29/29** (capturas en [`registro/`](../registro/)) · firmware `modulo_a` compila (flash 51,4 %) · **app SONAR 0.1.0** (`app/`, Vite+Preact+TS+Capacitor): núcleo 160 pruebas + transportes/STOP urgente + store 27 = **189 Vitest**, e2e de la app 42/42 con módulo simulado, APK debug 4,3 MB compilado; firmware anuncia `SONAR-A`/`SONAR-B` · concepto 3D del maletín en [`cad/`](../cad/LEEME.md) (modelo SolidWorks **a medias**).
+
+**Primera prueba en ESP32 real (15-nov, tarde, con Lucky/heat-lucky):** `PING`→`PONG SONAR-A 0.1.0` por USB · Bluetooth real con la APK conectó estable · servos pan/tilt moviéndose comandados desde la App real · `TEST` (5 posiciones) corrido por USB, `TEST DONE` sin errores. Detalle completo, bug de firmware encontrado/corregido y causa de los resets espontáneos (fuente de 6 V débil, no firmware) en [`registro/2026-11-15-banco-hardware.md`](../registro/2026-11-15-banco-hardware.md). **Falta aún:** precisión 5/5 dentro de 1 cm en cuadrícula impresa real (Control 1 completo), fuente de 6 V dedicada (la actual se hunde y resetea el ESP32), láser armado con su transistor propio.
 
 ## 6. Pendientes y responsable
 | Qué | Quién |
