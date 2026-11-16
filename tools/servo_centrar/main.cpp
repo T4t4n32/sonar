@@ -70,7 +70,7 @@ bool abortRequested() {
 bool moveTo(Servo& s, float target, bool abortable = false) {
   if (target < kMinDeg) target = kMinDeg;
   if (target > kMaxDeg) target = kMaxDeg;
-  if (!s.on) writeUs(s, usForDeg(s.deg));   // primer pulso en el ángulo recordado
+  writeUs(s, usForDeg(s.deg));   // siempre refresca el pulso actual (aunque ya este en el angulo objetivo)
   while (fabsf(s.deg - target) > 0.001f) {
     const float d = target - s.deg;
     s.deg += (fabsf(d) < 1.0f) ? d : (d > 0 ? 1.0f : -1.0f);
