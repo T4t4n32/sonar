@@ -25,7 +25,8 @@ Consecuencias: **no hacen falta sensores por casilla** (ni matriz LDR ni fotodet
 | Servos | **MG996R ×2 por módulo** (pan y tilt) + repuestos | 7-nov | [LISTA_MERCADOLIBRE](04-compras/LISTA_MERCADOLIBRE.md) |
 | Compras | Mercado Libre / tiendas colombianas, **nada de China** (llega tarde) | 7-nov | idem |
 | Publicación | Repositorio **privado** hasta el 24-nov; publicación programada ese día a las 20:00 (`tools/publicar.py`) | 7-nov | [LICENCIAS](05-publicacion/LICENCIAS.md) |
-| Matriz LED decorativa | **Diferida.** GPIO4 reservado (WS2812B, solo decorativa), sin código. Prioridad: lo que sí califica primero (test 5/5, app, contrincante); la matriz solo si sobra tiempo tras el 20-nov | 15-nov | [PINOUT](02-electronica/PINOUT.md) |
+| Hardware final | **ESP32 + 2 servos + láser + fase de potencia. Nada de luces** (sin matriz LED ni LED de acierto). Sonido y vibración en la app | 20-nov | [PINOUT](02-electronica/PINOUT.md) |
+| App: orientación del radar | La estación y el disparo salen **desde abajo** y (1,1) queda abajo-izquierda, como en el tablero físico (el usuario ve lo mismo que la estación) | 20-nov | [APP_SONAR](03-firmware-y-app/APP_SONAR.md) |
 
 ## 3. Conflictos entre fuentes (resueltos aquí)
 | Tema | Antes (3-nov, vault) | Ahora |

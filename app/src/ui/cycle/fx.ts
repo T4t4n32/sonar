@@ -1,5 +1,5 @@
 /**
- * Efectos del ciclo de disparo sobre un <canvas> 2D que cubre el escenario del radar (estación arriba + tablero 20×20).
+ * Efectos del ciclo de disparo sobre un <canvas> 2D que cubre el escenario del radar (tablero 20×20 con la estación ABAJO: el disparo sube desde ella, igual que en el tablero físico).
  * Pensado para un celular de gama baja: solo trazos, círculos y degradados radiales; sin blur ni filtros;
  * máximo ~40 partículas; el bucle rAF corre únicamente mientras hay algo animándose.
  * Con `prefers-reduced-motion` se usa una versión simple (un anillo / un destello) con la misma lógica de fases.
@@ -48,8 +48,8 @@ export class Fx {
     if (this.canvas.width !== bw || this.canvas.height !== bh) { this.canvas.width = bw; this.canvas.height = bh }
     this.ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
-  /** unidades del tablero (x: 0..20, y: -2.2..20) → píxeles del canvas */
-  private P(xu: number, yu: number): [number, number] { const u = this.w / 20; return [xu * u, (yu + 2.2) * u] }
+  /** unidades del escenario (x: 0..20; fila: 0 arriba … 20 = borde inferior del tablero; la estación queda en 21.5) → píxeles */
+  private P(xu: number, row: number): [number, number] { const u = this.w / 20; return [xu * u, row * u] }
   private get u(): number { return this.w / 20 }
 
   setPhase(phase: FxPhase, at: Coord, flightMs = 1100): void {
@@ -86,8 +86,8 @@ export class Fx {
   }
 
   // ---- piezas ----
-  private target(): [number, number] { return this.P(this.at.x - 0.5, this.at.y - 0.5) }
-  private station(): [number, number] { return this.P(10.5, -1.4) }
+  private target(): [number, number] { return this.P(this.at.x - 0.5, 20 - this.at.y + 0.5) }   // y = 1 es la fila de abajo
+  private station(): [number, number] { return this.P(10.5, 21.5) }
   private at_(p: number): [number, number] {
     const [sx, sy] = this.station(), [tx, ty] = this.target()
     return [sx + (tx - sx) * p, sy + (ty - sy) * p]
@@ -135,7 +135,7 @@ export class Fx {
     const [tx, ty] = this.target(), u = this.u
     // cruz tenue que cruza todo el tablero: se lee la coordenada de un vistazo
     ctx.strokeStyle = `rgba(217,243,238,${0.22 * a})`; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(tx, this.P(0, -1.2)[1]); ctx.lineTo(tx, this.h); ctx.moveTo(0, ty); ctx.lineTo(this.w, ty); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(tx, 0); ctx.lineTo(tx, this.P(0, 20)[1]); ctx.moveTo(0, ty); ctx.lineTo(this.w, ty); ctx.stroke()
     const k = (t % 900) / 900
     const R = u * (1.7 - 1.0 * easeOut(k))
     ctx.strokeStyle = `rgba(217,243,238,${(0.95 - 0.6 * k) * a})`; ctx.lineWidth = 2

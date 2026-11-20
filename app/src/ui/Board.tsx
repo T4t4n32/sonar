@@ -8,15 +8,17 @@ import { app } from '../state'
 import { CycleFx } from './cycle/Stage'
 
 const NUMS = Array.from({ length: N }, (_, i) => i + 1)
+/** Etiquetas del eje Y de arriba abajo: (1,1) queda ABAJO, junto a la estación, como en el tablero físico. */
+const NUMS_Y = [...NUMS].reverse()
 const clampCell = (n: number) => Math.max(1, Math.min(N, n))
 function cellFromPointer(e: PointerEvent): Coord {
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  return { x: clampCell(Math.floor(((e.clientX - r.left) / r.width) * N) + 1), y: clampCell(Math.floor(((e.clientY - r.top) / r.height) * N) + 1) }
+  return { x: clampCell(Math.floor(((e.clientX - r.left) / r.width) * N) + 1), y: clampCell(N - Math.floor(((e.clientY - r.top) / r.height) * N)) }
 }
 const capture = (e: PointerEvent) => { try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId) } catch { /* sin captura */ } }
 
 const YLab = (p: { y?: number | undefined }) => (
-  <div class="ylab" aria-hidden="true">{NUMS.map(n => <i class={`${n % 5 === 0 ? 'm' : ''} ${p.y === n ? 'on' : ''}`}>{n % 5 === 0 || n === 1 || p.y === n ? n : ''}</i>)}</div>
+  <div class="ylab" aria-hidden="true">{NUMS_Y.map(n => <i class={`${n % 5 === 0 ? 'm' : ''} ${p.y === n ? 'on' : ''}`}>{n % 5 === 0 || n === 1 || p.y === n ? n : ''}</i>)}</div>
 )
 const XLab = (p: { x?: number | undefined }) => (
   <div class="xlab" aria-hidden="true">{NUMS.map(n => <i class={`${n % 5 === 0 ? 'm' : ''} ${p.x === n ? 'on' : ''}`}>{n % 5 === 0 || n === 1 || p.x === n ? n : ''}</i>)}</div>
@@ -43,7 +45,7 @@ export function Radar() {
   const bt = beam ?? t ?? { x: 10, y: 10 }
 
   const cells = []
-  for (let y = 1; y <= N; y++) for (let x = 1; x <= N; x++) {
+  for (let y = N; y >= 1; y--) for (let x = 1; x <= N; x++) {   // fila de arriba = y 20; la de abajo (y 1) queda junto a la estación
     const st = map.get(key({ x, y }))
     let cls = 'c'
     if (st === 'hit') cls += ' hit'
@@ -67,7 +69,7 @@ export function Radar() {
 
   const set = (e: PointerEvent) => { if (aiming) app.setTarget(cellFromPointer(e)) }
   const arrow = (e: KeyboardEvent) => {
-    const d: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
+    const d: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }
     const v = d[e.key]
     if (!v) return
     e.preventDefault()
@@ -77,8 +79,7 @@ export function Radar() {
   return (
     <div class={`field ${phase === 'explosion' ? 'shake' : ''}`}>
       <div class="stage">
-        <div class="band"><XLab x={t?.x} /></div>
-        <div class={`bw ${t ? 'has' : ''}`} style={t ? { '--tx': t.x - 1, '--ty': t.y - 1 } : undefined} tabIndex={0} role="application" id="radar"
+        <div class={`bw ${t ? 'has' : ''}`} style={t ? { '--tx': t.x - 1, '--ty': N - t.y } : undefined} tabIndex={0} role="application" id="radar"
           aria-label="Radar de 20 por 20. Toca o arrastra para apuntar; las flechas del teclado ajustan la celda."
           onPointerDown={e => { if (!aiming) return; down.current = true; capture(e); set(e) }}
           onPointerMove={e => { if (down.current) set(e) }}
@@ -87,17 +88,18 @@ export function Radar() {
           <div class="board" aria-hidden="true">{cells}</div>
           <div class="fx" aria-hidden="true">
             <i class="cv" /><i class="ch" />
-            {app.rings.value.map(r => <i key={r.id} class={`ring ${r.kind}`} style={{ left: `${(r.at.x - 0.5) * 5}%`, top: `${(r.at.y - 0.5) * 5}%` }} />)}
+            {app.rings.value.map(r => <i key={r.id} class={`ring ${r.kind}`} style={{ left: `${(r.at.x - 0.5) * 5}%`, top: `${(N - r.at.y + 0.5) * 5}%` }} />)}
           </div>
         </div>
-        <svg class="svg" viewBox="0 -2.2 20 22.2" preserveAspectRatio="none" aria-hidden="true">
+        <div class="band low"><XLab x={t?.x} /></div>
+        <svg class="svg" viewBox="0 0 20 22.4" preserveAspectRatio="none" aria-hidden="true">
           <defs>
-            <linearGradient id="gs" gradientUnits="userSpaceOnUse" x1="10.5" y1="-1.4" x2="10.5" y2="22"><stop offset="0" style="stop-color:var(--sonar)" stop-opacity=".5" /><stop offset="1" style="stop-color:var(--sonar)" stop-opacity="0" /></linearGradient>
-            <clipPath id="cp"><rect x="0" y="-2.2" width="20" height="22.2" /></clipPath>
+            <linearGradient id="gs" gradientUnits="userSpaceOnUse" x1="10.5" y1="21.5" x2="10.5" y2="-2"><stop offset="0" style="stop-color:var(--sonar)" stop-opacity=".5" /><stop offset="1" style="stop-color:var(--sonar)" stop-opacity="0" /></linearGradient>
+            <clipPath id="cp"><rect x="0" y="0" width="20" height="22.4" /></clipPath>
           </defs>
-          <g clip-path="url(#cp)"><g class="sweep"><path d="M10.5 -1.4 8.1 24 12.9 24Z" fill="url(#gs)" /><path d="M10.5 -1.4 10.5 24" stroke="var(--sonar)" stroke-width=".05" opacity=".6" /></g></g>
-          <line class={`beam ${beam ? 'on' : ''}`} x1="10.5" y1="-1.4" x2={bt.x - 0.5} y2={bt.y - 0.5} />
-          <circle class="stn" cx="10.5" cy="-1.4" r=".5" /><circle cx="10.5" cy="-1.4" r=".16" fill="var(--sonar)" />
+          <g clip-path="url(#cp)"><g class="sweep"><path d="M10.5 21.5 8.1 -4 12.9 -4Z" fill="url(#gs)" /><path d="M10.5 21.5 10.5 -4" stroke="var(--sonar)" stroke-width=".05" opacity=".6" /></g></g>
+          <line class={`beam ${beam ? 'on' : ''}`} x1="10.5" y1="21.5" x2={bt.x - 0.5} y2={N - bt.y + 0.5} />
+          <circle class="stn" cx="10.5" cy="21.5" r=".5" /><circle cx="10.5" cy="21.5" r=".16" fill="var(--sonar)" />
         </svg>
         <CycleFx />
       </div>
@@ -115,7 +117,7 @@ export function FleetBoard(p: { edit: boolean; reveal: boolean }) {
   for (const s of ships) for (const c of shipCells(s)) { const k = key(c); owner.set(k, [...(owner.get(k) ?? []), s.id]) }
 
   const cells = []
-  for (let y = 1; y <= N; y++) for (let x = 1; x <= N; x++) {
+  for (let y = N; y >= 1; y--) for (let x = 1; x <= N; x++) {
     const k = key({ x, y })
     const ids = owner.get(k)
     let cls = 'c'

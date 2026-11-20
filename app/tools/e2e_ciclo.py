@@ -54,7 +54,7 @@ def drag_cells(pg, a: tuple[int, int], b: tuple[int, int], steps: int = 12) -> N
     cw = bb["width"] / 20
 
     def pt(c, dx=0.0, dy=0.0):
-        return bb["x"] + (c[0] - 0.5) * cw + dx, bb["y"] + (c[1] - 0.5) * cw + dy
+        return bb["x"] + (c[0] - 0.5) * cw + dx, bb["y"] + (20 - c[1] + 0.5) * cw + dy   # y = 1 es la fila de abajo
     x0, y0 = pt(a)
     pg.mouse.move(x0, y0)
     pg.mouse.down()

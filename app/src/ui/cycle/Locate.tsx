@@ -12,7 +12,7 @@ const same = (a: Coord, b: Coord) => a.x === b.x && a.y === b.y
 /** Casilla bajo el dedo (sobre el tablero, con el dedo capturado fuera también se ajusta al borde). */
 function cellAt(e: PointerEvent): Coord {
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  return { x: clampCell(Math.floor(((e.clientX - r.left) / r.width) * N) + 1), y: clampCell(Math.floor(((e.clientY - r.top) / r.height) * N) + 1) }
+  return { x: clampCell(Math.floor(((e.clientX - r.left) / r.width) * N) + 1), y: clampCell(N - Math.floor(((e.clientY - r.top) / r.height) * N)) }
 }
 
 /** Trazo «ajustado» a un eje: solo recta horizontal o vertical desde `a` hasta la proyección de `b`. */
@@ -57,7 +57,7 @@ export function LocateScreen() {
   const up = () => { drag.current = null }
 
   const cells = []
-  for (let y = 1; y <= N; y++) for (let x = 1; x <= N; x++) {
+  for (let y = N; y >= 1; y--) for (let x = 1; x <= N; x++) {   // (1,1) abajo, igual que el radar
     const k = key({ x, y })
     let cls = 'c'
     const ks = knownShipAt(known, { x, y })
@@ -94,7 +94,7 @@ export function LocateScreen() {
           <div class="band slim"><div class="xlab" aria-hidden="true">{NUMS.map(n => <i class={n % 5 === 0 || n === 1 ? 'm' : ''}>{n % 5 === 0 || n === 1 ? n : ''}</i>)}</div></div>
           <div class="bw" id="locBoard" style={{ cursor: 'crosshair' }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
             aria-label="Tablero 20 por 20. Arrastra para trazar el barco.">
-            <div class="ylab" aria-hidden="true">{NUMS.map(n => <i class={n % 5 === 0 ? 'm' : ''}>{n % 5 === 0 || n === 1 ? n : ''}</i>)}</div>
+            <div class="ylab" aria-hidden="true">{[...NUMS].reverse().map(n => <i class={n % 5 === 0 ? 'm' : ''}>{n % 5 === 0 || n === 1 ? n : ''}</i>)}</div>
             <div class="board" aria-hidden="true">{cells}</div>
           </div>
         </div>

@@ -36,6 +36,8 @@ La app es **muy animada**; el profesor opera el celular de Sebas y **ellos (estu
 **Tutorial inicial** (primera vez y en Ajustes → «Ver tutorial»): animación de arranque del logotipo (ping de sonar) y luego, **sin interacción**, primero la **dinámica del juego** (flota, conexión Bluetooth, TEST, coordenada x→y, láser, veredicto, explosión/gota, ubicar el barco) y después el **recorrido de la interfaz** con pantallas simuladas animadas. Siempre con «Saltar».
 Nota de diseño: ubicar el barco completo revela su posición al jugador que dispara (lo que se quiere aquí); el asistente de tiro sigue disponible, apagado por defecto.
 
+**Orientación (2026-11-20):** el radar se ve como lo ve quien está detrás de la estación: la **estación abajo**, el disparo **sube** hacia la casilla y **(1,1) queda abajo-izquierda** (y crece hacia arriba). Lo mismo en «Mi flota» y «Ubica el barco».
+
 ## 2. Cómo se ve la app (norte: «puente de mando de un submarino»)
 Android nativo (APK), vertical, una mano, modo oscuro por defecto (claro opcional). Sin menús escondidos: **barra inferior de 4 pestañas**.
 

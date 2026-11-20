@@ -80,6 +80,7 @@ input,textarea{-webkit-user-select:text;user-select:text}
 .stage{position:relative}
 .band{aspect-ratio:20/2.2;position:relative}
 .band.slim{aspect-ratio:20/.9}
+.band.low{aspect-ratio:20/2.4}.band.low .xlab{top:0;bottom:auto}   /* radar: la estación queda debajo del tablero */
 .xlab{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(20,1fr);font:9px/1 var(--mono);color:var(--mut);text-align:center}
 .xlab i{font-style:normal;transition:color .18s,transform .18s var(--ease-out)}
 .xlab i.m{color:var(--txt)}.xlab i.on,.ylab i.on{color:var(--sonar);font-weight:700;transform:scale(1.25)}
@@ -110,13 +111,13 @@ input,textarea{-webkit-user-select:text;user-select:text}
 .hidden-board .c::before{background:var(--cell)}
 .fx{position:absolute;inset:0;pointer-events:none;overflow:visible}
 .svg{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;pointer-events:none}
-.svg .sweep{transform-origin:10.5px -1.4px;animation:sweep 3.6s var(--ease-io) infinite alternate}
+.svg .sweep{transform-origin:10.5px 21.5px;animation:sweep 3.6s var(--ease-io) infinite alternate}
 html[data-theme="light"] .svg .sweep{opacity:.55}
 .svg .stn{fill:var(--panel);stroke:var(--sonar);stroke-width:.14}
 .svg .beam{stroke:var(--hit);stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linecap:round;opacity:0;filter:drop-shadow(0 0 3px var(--hit))}
 .svg .beam.on{opacity:1;animation:draw .16s var(--ease-out)}
 .cv,.ch{position:absolute;background:var(--sonar);opacity:0;transition:opacity .18s}
-.cv{left:calc((var(--tx,0) + .5)*5%);top:0;width:1px;height:100%;transform-origin:0 0;transform:scaleY(calc((var(--ty,0) + .5)/20));transition:opacity .18s,transform .2s var(--ease-out)}
+.cv{left:calc((var(--tx,0) + .5)*5%);top:0;width:1px;height:100%;transform-origin:0 100%;transform:scaleY(calc((19.5 - var(--ty,0))/20));transition:opacity .18s,transform .2s var(--ease-out)}
 .ch{top:calc((var(--ty,0) + .5)*5%);left:0;height:1px;width:100%;transform-origin:0 0;transform:scaleX(calc((var(--tx,0) + .5)/20));transition:opacity .18s,transform .2s var(--ease-out)}
 .has .cv,.has .ch{opacity:.55}
 .ring{position:absolute;width:5%;height:5%;border-radius:50%;border:2px solid var(--c,var(--echo));opacity:0;transform:translate(-50%,-50%) scale(.4);animation:eco .95s var(--ease-out) forwards}

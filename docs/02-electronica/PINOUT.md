@@ -5,20 +5,22 @@
 | Servo **pan** (MG996R) | 18 | señal; alimentación a 6 V; GND común con el ESP32 |
 | Servo **tilt** (MG90S) | 19 | señal; alimentación a 6 V |
 | **Láser** (KY-008) | 23 | GPIO → 1 kΩ → base de un 2N2222A; emisor a GND; el láser entre 5 V y el colector; **10 kΩ de la base a GND** (queda apagado al arrancar) |
-| **Zumbador** activo | 21 | GPIO → zumbador → GND (si consume > 12 mA, con transistor) |
-| **LED** de acierto | 22 | GPIO → 330 Ω → LED → GND |
-| Pulsador **TEST** | 25 | a GND (pull-up interno) |
-| Interruptor **MAINT** | 26 | a GND al arrancar = modo mantenimiento (Wi-Fi) |
-| Medida de 5 V (opcional) | 34 | divisor 100 kΩ / 33 kΩ |
 | **Interruptor general** | — (no es GPIO) | mecánico, en serie con la entrada de 6 V, antes de cualquier regulador; corta/da paso a toda la alimentación (servos + ESP32) de una vez |
 
-## Reservado (propuesto 2026-11-15, NO implementado)
+## Hardware final (decisión de Sebas, 2026-11-20)
 
-| Señal | GPIO | Conexión |
+**ESP32 + 2 servos + láser + fase de potencia. Nada de luces** (ni matriz WS2812B ni LED de acierto). El sonido y la vibración los hace la app en el celular.
+
+Lo siguiente **ya no se arma**. El firmware conserva los pines y no falla si faltan, porque no hay nada conectado que leer:
+
+| Señal | GPIO | Estado |
 |---|---|---|
-| Matriz LED decorativa (WS2812B) | 4 | dato; VCC a 5 V; GND común; 100 nF por LED + 470 µF al inicio de la tira |
-
-Solo decorativa (feedback visual de acierto/fallo), sin lógica de juego ni detección — eso ya se descartó por tiempo (ver `docs/00-proyecto/RUBRICA_Y_CUMPLIMIENTO.md`, no suma puntos de rúbrica). Pin reservado para no chocar con nada de la lista de arriba; sin código todavía. El WS2812B a 5 V espera ≥3,5 V en la señal y el GPIO da 3,3 V — en tiras cortas suele andar igual; si hay parpadeo, agregar un buffer 74HCT125 entre GPIO4 y la tira.
+| Zumbador activo | 21 | opcional (la app suena en el celular) |
+| LED de acierto | 22 | **descartado** |
+| Pulsador TEST | 25 | opcional (el TEST se lanza desde la app) |
+| Interruptor MAINT | 26 | opcional (modo mantenimiento Wi-Fi) |
+| Medida de 5 V | 34 | opcional |
+| Matriz LED decorativa (WS2812B) | 4 | **descartada** |
 
 ## Alimentación (por módulo)
 

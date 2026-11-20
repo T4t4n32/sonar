@@ -127,13 +127,13 @@ export function EscCoordenada() {
 export function EscLaser() {
   return (
     <div class="sc">
-      <Board vb="0 -30 200 230">
-        <g class="an fall" style={t(0, 0.12)}>
-          <rect class="tur" x={88} y={-26} width={24} height={14} rx={4} />
-          <circle class="turl" cx={100} cy={-12} r={3.4} />
+      <Board vb="0 0 200 230">
+        <g class="an fallup" style={t(0, 0.12)}>
+          <rect class="tur" x={88} y={212} width={24} height={14} rx={4} />
+          <circle class="turl" cx={100} cy={212} r={3.4} />
         </g>
-        <line class="beamg an draw" pathLength={1} style={t(0.25, 0.2)} x1={100} y1={-12} x2={cc(TX)} y2={cc(TY)} />
-        <line class="beam an draw" pathLength={1} style={t(0.25, 0.2)} x1={100} y1={-12} x2={cc(TX)} y2={cc(TY)} />
+        <line class="beamg an draw" pathLength={1} style={t(0.25, 0.2)} x1={100} y1={212} x2={cc(TX)} y2={cc(TY)} />
+        <line class="beam an draw" pathLength={1} style={t(0.25, 0.2)} x1={100} y1={212} x2={cc(TX)} y2={cc(TY)} />
         <rect class="cellx an pop" style={t(0.45, 0.1)} x={TX * 10} y={TY * 10} width={10} height={10} />
         <circle class="dotx an pop" style={t(0.45, 0.08)} cx={cc(TX)} cy={cc(TY)} r={2.6} />
         <circle class="ripx an ripple lp" style={`--w:1.6s`} cx={cc(TX)} cy={cc(TY)} r={6} />

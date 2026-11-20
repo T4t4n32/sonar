@@ -44,6 +44,8 @@
 .ripple{animation-name:ripple}.draw{animation-name:draw}.burst{animation-name:burst}.conf{animation-name:conf}
 .kpress{animation-name:kpress}.ring,.ringa{animation-name:ringwin}.drop{animation-name:drop}.drag{animation-name:drag;animation-timing-function:cubic-bezier(.65,0,.35,1)}
 .flash{animation-name:flash}.grow{animation-name:grow;animation-timing-function:linear;transform-origin:left}
+.fallup{animation-name:fallup}   /* la estación entra desde abajo del tablero */
+@keyframes fallup{0%{opacity:0;transform:translateY(110px)}55%{opacity:1;transform:translateY(-5px)}78%{transform:translateY(2px)}100%{opacity:1;transform:none}}
 @keyframes fall{0%{opacity:0;transform:translateY(-110px)}55%{opacity:1;transform:translateY(5px)}78%{transform:translateY(-2px)}100%{opacity:1;transform:none}}
 @keyframes pop{0%{opacity:0;transform:scale(.4)}65%{opacity:1;transform:scale(1.1)}100%{opacity:1;transform:none}}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
