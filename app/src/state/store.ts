@@ -10,6 +10,7 @@ import { fire, friendlyError, isValidCoord, parseReply, type CalValues, type Err
 import { FLEET_SPEC, type Coord, type LinkState, type Orient, type PlacedShip } from '../core/types'
 import { SimTransport } from '../transport/sim'
 import type { LineTransport, PeerInfo } from '../transport/transport'
+import { createCalib } from './calib'
 import { IDLE, isCancellable, next as cycleNext, type Cycle, type CycleEvent } from './cycle'
 import { makeFeedback, setWake, type FxEvent } from './feedback'
 import { loadJSON, localKV, saveJSON, type KV } from './storage'
@@ -144,6 +145,7 @@ export function createApp(deps: AppDeps = {}) {
   const cal = signal<CalValues | null>(null)
   const calMsg = signal('')
   const log = signal<LogEntry[]>([])
+  const calib = createCalib({ kv, send, connected: computed(() => link.value === 'on' || link.value === 'busy'), busy, caps: computed(() => hello.value?.caps ?? []) })
   const victory = signal(cycle.value.phase === 'won')
 
   const validation = computed(() => validateFleet(fleet.value))
@@ -274,6 +276,7 @@ export function createApp(deps: AppDeps = {}) {
     stopHeartbeat()
     try { await transport?.disconnect() } catch { /* nada */ }
     batch(() => { link.value = 'off'; linkMsg.value = 'Desconectado'; hello.value = null; busy.value = false })
+    calib.linkLost()
     addLog('sys', 'Desconectado')
   }
 
@@ -285,6 +288,7 @@ export function createApp(deps: AppDeps = {}) {
     }
     stopHeartbeat()
     batch(() => { busy.value = false; hello.value = null })
+    calib.linkLost()
     if (isCancellable(cycle.value.phase)) cancelCycle('Se perdió el enlace con el módulo.')
     if (test.value.state === 'run') test.value = { ...test.value, state: 'fail', msg: 'Se perdió el enlace durante la prueba.' }
     if (manualClose) { link.value = 'off'; linkMsg.value = 'Desconectado'; return }
@@ -310,7 +314,7 @@ export function createApp(deps: AppDeps = {}) {
 
   // ---------- latido ----------
   async function ping(): Promise<boolean> {
-    if (!transport?.isConnected() || busy.value || test.value.state === 'run') return true
+    if (!transport?.isConnected() || busy.value || test.value.state === 'run' || calib.working.value > 0) return true
     const t0 = now()
     try {
       const lines = await send('PING', 3000)
@@ -434,6 +438,7 @@ export function createApp(deps: AppDeps = {}) {
     if (busy.value || test.value.state === 'run') return fail('busy', 'El módulo sigue con el disparo anterior. Espera o pulsa STOP.')
     if (hasShot(game.value, c)) { flashCell(c); feedback('error'); return fail('repeat', `Ya disparaste a (${c.x},${c.y}): casilla resuelta. Elige otra.`) }
     const direct = !!knownShipAt(known.value, c)
+    calib.laserKilled() // el módulo apaga el láser de calibración al disparar
     if (direct) pushUndo(IDLE)
     batch(() => {
       busy.value = true; link.value = 'busy'; beam.value = c
@@ -478,6 +483,7 @@ export function createApp(deps: AppDeps = {}) {
     if (!transport?.isConnected()) { if (!cancelFx.value) setStatus('err', 'Sin enlace: no hay nada que detener.'); return }
     try {
       await send('STOP', 3000)
+      calib.laserKilled()
       setStatus('ok', 'STOP enviado')
     } catch (e) { setStatus('err', `STOP no confirmado: ${errMsg(e)}`) }
   }
@@ -557,6 +563,7 @@ export function createApp(deps: AppDeps = {}) {
       return false
     }
     if (busy.value || test.value.state === 'run') return false
+    calib.laserKilled()
     const t0 = now()
     batch(() => { busy.value = true; link.value = 'busy'; test.value = { state: 'run', done: 0, at: [], msg: 'Probando 5 posiciones…', startedAt: t0, durationMs: 0 } })
     const live: Coord[] = []
@@ -619,6 +626,9 @@ export function createApp(deps: AppDeps = {}) {
     }
     return calCmd(`CAL SET ${v.x} ${v.y} ${v.h} ${v.panTrim} ${v.tiltTrim}`, 'Calibración aplicada (aún sin guardar).')
   }
+
+  // ---------- calibración de apuntado (protocolo v3) ----------
+  const calibResetMap = async (): Promise<boolean> => { const ok = await calib.resetMap(); if (ok) await calShow(); return ok }
 
   // ---------- apuntar ----------
   const clamp = (n: number) => Math.max(1, Math.min(20, Math.round(n)))
@@ -692,6 +702,7 @@ export function createApp(deps: AppDeps = {}) {
   async function init(): Promise<void> { await ensureTransport(); void refreshPeers() }
   async function dispose(): Promise<void> {
     disposers.forEach(d => d())
+    calib.dispose()
     token++; clearTimers()
     manualClose = true
     detach()
@@ -706,6 +717,7 @@ export function createApp(deps: AppDeps = {}) {
     // derivadas
     validation, pendingShot, connected, unplaced, pendingHits, left,
     // acciones
+    calib, calibResetMap,
     init, dispose, setKind, refreshPeers, connect, disconnect, ping, fireAt, stop, runTest, calShow, calSet, calSave, calReset,
     setTarget, setAxis, nudgeAxis, answer, dismissConflict, checkLocation, locate, skipLocate, relocate, undo,
     tapCell, moveShipTo, rotateSelected, removeSelected, randomizeFleet, clearFleet, setFleet, fleetText,

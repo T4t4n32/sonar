@@ -95,6 +95,66 @@ ParseResult simple(CmdType t) {
   return r;
 }
 
+// Entero estricto (solo dígitos, sin signo) con tope para no desbordar; false si no es un entero.
+bool parseUInt(const std::string& t, long& out) {
+  if (t.empty()) return false;
+  long v = 0;
+  for (size_t i = 0; i < t.size(); ++i) {
+    if (!isDigit(t[i])) return false;
+    if (v < 1000000) v = v * 10 + (t[i] - '0');
+  }
+  out = v;
+  return true;
+}
+
+// Órdenes v3 (calibración por esquinas). `w` ya está en mayúsculas.
+bool isV3(const std::string& w) {
+  return w == "PT" || w == "JOG" || w == "GOTO" || w == "LASER" || w == "CORNER" || w == "CORNERS" || w == "AIM";
+}
+
+ParseResult parseV3(const std::vector<std::string>& tok) {
+  const std::string& w = tok[0];
+  if (w == "PT" || w == "CORNERS") {
+    if (tok.size() != 1) return failure(ParseError::BadFormat);
+    return simple(w == "PT" ? CmdType::Pt : CmdType::Corners);
+  }
+  if (w == "LASER") {
+    if (tok.size() == 1) return simple(CmdType::LaserQuery);
+    if (tok[1] != "ON" && tok[1] != "OFF") return failure(ParseError::Unknown);
+    if (tok.size() != 2) return failure(ParseError::BadFormat);
+    return simple(tok[1] == "ON" ? CmdType::LaserOn : CmdType::LaserOff);
+  }
+  if (w == "JOG" || w == "GOTO") {
+    if (tok.size() != 3) return failure(ParseError::BadFormat);
+    ParseResult r = simple(w == "JOG" ? CmdType::Jog : CmdType::Goto);
+    if (!parseNumber(tok[1], r.cmd.a) || !parseNumber(tok[2], r.cmd.b)) return failure(ParseError::BadFormat);
+    if (w == "JOG") {
+      if (r.cmd.a < -cfg::JOG_MAX_DEG || r.cmd.a > cfg::JOG_MAX_DEG || r.cmd.b < -cfg::JOG_MAX_DEG || r.cmd.b > cfg::JOG_MAX_DEG)
+        return failure(ParseError::Range);
+    } else if (r.cmd.a < cfg::SERVO_SAFE_MIN || r.cmd.a > cfg::SERVO_SAFE_MAX || r.cmd.b < cfg::SERVO_SAFE_MIN ||
+               r.cmd.b > cfg::SERVO_SAFE_MAX) {
+      return failure(ParseError::Range);
+    }
+    return r;
+  }
+  if (w == "CORNER") {
+    long n;
+    if (tok.size() != 2 || !parseUInt(tok[1], n)) return failure(ParseError::BadFormat);
+    if (n < 1 || n > 5) return failure(ParseError::Range);
+    ParseResult r = simple(CmdType::Corner);
+    r.cmd.x = static_cast<int>(n);
+    return r;
+  }
+  // AIM x y
+  long x, y;
+  if (tok.size() != 3 || !parseUInt(tok[1], x) || !parseUInt(tok[2], y)) return failure(ParseError::BadFormat);
+  if (x < 1 || x > cfg::GRID_N || y < 1 || y > cfg::GRID_N) return failure(ParseError::Range);
+  ParseResult r = simple(CmdType::Aim);
+  r.cmd.x = static_cast<int>(x);
+  r.cmd.y = static_cast<int>(y);
+  return r;
+}
+
 ParseResult parseKeyword(const std::string& s) {
   const std::vector<std::string> tok = tokenize(s, true);
   const std::string& w = tok[0];   // s no está vacío y empieza por letra: hay al menos un token
@@ -103,6 +163,8 @@ ParseResult parseKeyword(const std::string& s) {
     if (tok.size() != 1) return failure(ParseError::BadFormat);
     return simple(w == "TEST" ? CmdType::Test : (w == "STOP" ? CmdType::Stop : CmdType::Ping));
   }
+
+  if (isV3(w)) return parseV3(tok);
 
   if (w == "HELLO" || w == "ARM") {
     if (tok.size() != 1) return failure(ParseError::BadFormat);
@@ -128,6 +190,10 @@ ParseResult parseKeyword(const std::string& s) {
   if (w == "CAL") {
     if (tok.size() < 2) return failure(ParseError::BadFormat);
     const std::string& sub = tok[1];
+    if (sub == "FIT" || sub == "MAP") {
+      if (tok.size() != 2) return failure(ParseError::BadFormat);
+      return simple(sub == "FIT" ? CmdType::CalFit : CmdType::CalMap);
+    }
     if (sub == "SHOW" || sub == "SAVE" || sub == "RESET") {
       if (tok.size() != 2) return failure(ParseError::BadFormat);
       return simple(sub == "SHOW" ? CmdType::CalShow : (sub == "SAVE" ? CmdType::CalSave : CmdType::CalReset));

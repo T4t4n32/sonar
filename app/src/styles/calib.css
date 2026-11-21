@@ -1,0 +1,32 @@
+/* ---------- Calibrar apuntado (pestaña Enlace) ---------- */
+.calib{display:grid;gap:10px}
+.calib .cardhead{margin-bottom:0}
+.calintro{line-height:1.35}
+.dpad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,64px);gap:8px;justify-content:center;margin:2px 0}
+.jogb{min-width:64px;min-height:64px;border:1px solid var(--line2);border-radius:14px;background:var(--panel2);color:var(--txt);font:700 1.7rem var(--mono);cursor:pointer;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;transition:transform .12s var(--ease-out),background .12s,border-color .12s}
+.jogb:active:not(:disabled){transform:scale(.94);background:var(--panel);border-color:var(--sonar)}
+.jogb:disabled{opacity:.38;cursor:not-allowed}
+.dpad .up{grid-column:2;grid-row:1}
+.dpad .left{grid-column:1;grid-row:2}
+.dpad .jogmid{grid-column:2;grid-row:2;min-height:64px;padding:0;font:700 .95rem var(--mono)}
+.dpad .right{grid-column:3;grid-row:2}
+.dpad .down{grid-column:2;grid-row:3}
+.calread{text-align:center;font:.9rem var(--mono);color:var(--mut)}
+.calread b{color:var(--txt);font-weight:700}
+.btn.laseron{border-color:var(--hit);color:var(--hit);box-shadow:0 0 0 2px color-mix(in srgb,var(--hit) 28%,transparent)}
+.calinv{margin-top:-2px}
+.calinv label{display:flex;gap:8px;align-items:center;min-height:48px;font-size:.84rem;color:var(--mut)}
+.calinv input{width:22px;height:22px;flex:none}
+.cornerlist{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.cornerlist li{display:grid;grid-template-columns:1fr 34px;gap:8px;align-items:center}
+.cornerlist .btn{width:100%;min-height:52px;padding:8px 12px;text-align:left;white-space:normal;line-height:1.2;font-size:.82rem;letter-spacing:.02em}
+.cornerlist li.ok .btn{border-color:var(--sonar)}
+.cmark{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);color:var(--mut);font:700 1rem var(--mono)}
+.cornerlist li.ok .cmark{border-color:var(--sonar);background:var(--sonar);color:var(--sonar-ink)}
+.calfit{width:100%}
+.calres{text-align:center;min-height:1.4em}
+.calfield{margin-top:2px}
+.band.slim.under .xlab{top:0;bottom:auto}
+.c.cornc::after{content:"";position:absolute;inset:26%;border-radius:50%;border:1px dashed var(--sonar);opacity:.8}
+.calmsg{min-height:2.8em;color:var(--txt)}
+@media (prefers-reduced-motion: reduce){.jogb{transition:none}}

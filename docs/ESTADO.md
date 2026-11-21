@@ -26,6 +26,9 @@ Consecuencias: **no hacen falta sensores por casilla** (ni matriz LDR ni fotodet
 | Compras | Mercado Libre / tiendas colombianas, **nada de China** (llega tarde) | 7-nov | idem |
 | Publicación | Repositorio **privado** hasta el 24-nov; publicación programada ese día a las 20:00 (`tools/publicar.py`) | 7-nov | [LICENCIAS](05-publicacion/LICENCIAS.md) |
 | Hardware final | **ESP32 + 2 servos + láser + fase de potencia. Nada de luces** (sin matriz LED ni LED de acierto). Sonido y vibración en la app | 20-nov | [PINOUT](02-electronica/PINOUT.md) |
+| Apuntado | **Calibración por esquinas** (protocolo v3): se apunta el láser a las 4 esquinas reales de la matriz (cruceta en la app) y el módulo ajusta una homografía; sirve para pared vertical u horizontal sin medir distancias. Guía: [CALIBRACION](03-firmware-y-app/CALIBRACION.md). 63/63 pruebas nativas | 21-nov | [PROTOCOLO](03-firmware-y-app/PROTOCOLO.md) |
+| Maqueta | Cajón de cartón (servos + electrónica) y pared vertical para la matriz; sin diseño 3D por tiempo. Presentar el lunes 23-nov da +0,5 | 21-nov | — |
+| Alimentación | Power bank por cable USB-A→C cortado con interruptor en el +5 V; servos a 5 V desde el mismo cable (no por el pin del ESP32), condensador 1000 µF | 21-nov | [PINOUT](02-electronica/PINOUT.md) |
 | App: orientación del radar | La estación y el disparo salen **desde abajo** y (1,1) queda abajo-izquierda, como en el tablero físico (el usuario ve lo mismo que la estación) | 20-nov | [APP_SONAR](03-firmware-y-app/APP_SONAR.md) |
 
 ## 3. Conflictos entre fuentes (resueltos aquí)

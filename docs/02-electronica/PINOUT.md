@@ -4,7 +4,7 @@
 |---|---|---|
 | Servo **pan** (MG996R) | 18 | señal; alimentación a 6 V; GND común con el ESP32 |
 | Servo **tilt** (MG90S) | 19 | señal; alimentación a 6 V |
-| **Láser** (KY-008) | 23 | GPIO → 1 kΩ → base de un 2N2222A; emisor a GND; el láser entre 5 V y el colector; **10 kΩ de la base a GND** (queda apagado al arrancar) |
+| **Láser** (KY-008, 3 pines: `S`, medio sin usar, `-`) | 23 | **Con transistor (recomendado):** GPIO → 1 kΩ → base del 2N2222; emisor a GND; láser entre +5 V (pin `S`) y el colector (pin `-`); **10 kΩ de la base a GND** (queda apagado al arrancar). **Directo (plan B, probado como válido):** pin `S` → GPIO 23, pin `-` → GND (≈ 20–30 mA por el pin y algo menos de brillo). Patillas del 2N2222: según el encapsulado (TO-18 metálico o TO-92 de plástico) E-B-C o C-B-E; verifícalas con el multímetro en modo diodo |
 | **Interruptor general** | — (no es GPIO) | mecánico, en serie con la entrada de 6 V, antes de cualquier regulador; corta/da paso a toda la alimentación (servos + ESP32) de una vez |
 
 ## Hardware final (decisión de Sebas, 2026-11-20)

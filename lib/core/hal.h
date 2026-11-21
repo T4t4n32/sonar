@@ -2,6 +2,7 @@
 // Interfaces de hardware (HAL). PURO C++: la implementación real vive en lib/hal_esp32 y las falsas, en test/. Contrato compartido.
 #include <stdint.h>
 #include "geometry.h"
+#include "gridmap.h"
 
 namespace hal {
 
@@ -38,6 +39,14 @@ struct CalStore {
   virtual ~CalStore() {}
   virtual bool load(core::Calibration& out) = 0;          // false si no hay datos válidos
   virtual bool save(const core::Calibration& c) = 0;
+  virtual void erase() = 0;
+};
+
+// Mapa de apuntado por esquinas (calibración medida). Almacén aparte del de CalStore: no cambia su formato.
+struct GridStore {
+  virtual ~GridStore() {}
+  virtual bool load(core::GridCal& out) = 0;              // false si no hay datos válidos
+  virtual bool save(const core::GridCal& g) = 0;
   virtual void erase() = 0;
 };
 

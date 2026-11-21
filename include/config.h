@@ -36,6 +36,12 @@ constexpr float MAX_STEP_DEG = 2.0f;     // rampa: máximo avance por paso
 constexpr uint32_t STEP_MS   = 20;
 constexpr float OVERSHOOT_DEG = 2.0f;    // aproximarse siempre desde el mismo lado
 
+// ---- Calibración por esquinas (JOG / GOTO / LASER ON)
+constexpr float JOG_MAX_DEG      = 20.0f;      // paso relativo máximo por orden JOG
+constexpr float SERVO_SAFE_MIN   = 15.0f;      // el firmware nunca ordena ángulos fuera de este rango por JOG/GOTO/AIM
+constexpr float SERVO_SAFE_MAX   = 165.0f;
+constexpr uint32_t AIM_LASER_MAX_MS = 120000;  // LASER ON se apaga solo a los 120 s
+
 // ---- Tiempos
 constexpr uint32_t SETTLE_MS   = 300;    // espera tras detener los servos, antes de encender el láser
 constexpr uint32_t LASER_ON_MS = 1500;

@@ -82,4 +82,12 @@ class NvsCalStore : public hal::CalStore {
   void erase() override;
 };
 
+// Mapa de apuntado por esquinas en NVS: namespace "duelo", clave "grid", blob = core::gridSerialize.
+class NvsGridStore : public hal::GridStore {
+ public:
+  bool load(core::GridCal& out) override;
+  bool save(const core::GridCal& g) override;
+  void erase() override;
+};
+
 }  // namespace hal_esp32

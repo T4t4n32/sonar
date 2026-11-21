@@ -207,6 +207,35 @@ class FakeStore : public hal::CalStore {
   Log& log_;
 };
 
+// Almacén del mapa por esquinas. No registra eventos en `Log` (no altera las secuencias de las pruebas de v1/v2).
+class FakeGridStore : public hal::GridStore {
+ public:
+  bool load(core::GridCal& out) override {
+    ++loads;
+    if (!hasData) return false;
+    out = data;
+    return true;
+  }
+  bool save(const core::GridCal& g) override {
+    ++saves;
+    if (!saveOk) return false;
+    data = g;
+    hasData = true;
+    return true;
+  }
+  void erase() override {
+    ++erases;
+    hasData = false;
+  }
+
+  bool hasData = false;
+  core::GridCal data;
+  bool saveOk = true;
+  int loads = 0;
+  int saves = 0;
+  int erases = 0;
+};
+
 // Un módulo completo: HAL falsos + Controller, todos sobre el mismo registro.
 struct Rig {
   Log log;
@@ -217,9 +246,10 @@ struct Rig {
   FakeLed led{log};
   FakeClock clock{log};
   FakeStore store{log};
+  FakeGridStore gridStore;
   core::Controller ctrl{pan, tilt, laser, buzzer, led, clock, store};
 
-  Rig() = default;
+  Rig() { ctrl.setGridStore(&gridStore); }
   Rig(const Rig&) = delete;
   Rig& operator=(const Rig&) = delete;
 

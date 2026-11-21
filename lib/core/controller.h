@@ -43,7 +43,11 @@ class Controller {
   };
   void setLink(const Link& l) { link_ = l; }
 
+  // Mapa de apuntado por esquinas (opcional; llamar ANTES de begin()). Sin almacén, el mapa solo vive en RAM.
+  void setGridStore(hal::GridStore* s) { gridStore_ = s; }
+
   void begin();
+  void tick();                                                   // llamar desde el bucle principal: apaga el láser de apuntado vencido
   void handleLine(const std::string& line, const Reply& out);   // una línea completa; bloquea mientras dispara
   void requestStop();                                            // seguro desde otra tarea: aborta y apaga el láser en cuanto pueda
   bool busy() const;
@@ -65,8 +69,14 @@ class Controller {
   float panNowDeg_ = 90.0f;
   float tiltNowDeg_ = 90.0f;
   bool servosAttached_ = false;
+  hal::GridStore* gridStore_ = nullptr;
+  GridCal grid_;                                // mapa por esquinas (valid = se usa en vez de la geometría)
+  volatile bool aimLaserOn_ = false;            // láser encendido a propósito por LASER ON (calibración)
+  uint32_t aimLaserSince_ = 0;
 
   bool disarmed() const;                        // armado exigido y vencido
+  bool targetFor(Cell c, ServoCmd& out) const;  // ángulos de servo de una celda (mapa por esquinas si lo hay; si no, geometría)
+  void attachServos();
   bool fire(Cell c, std::string& errLine);
   void moveAxis(hal::Servo& s, float& nowDeg, float targetDeg);
 };

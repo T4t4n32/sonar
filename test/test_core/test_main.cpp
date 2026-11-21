@@ -14,6 +14,7 @@
 #include "controller.h"
 #include "fakes.h"
 #include "geometry.h"
+#include "gridmap.h"
 #include "protocol.h"
 
 using fakes::Ev;
@@ -1396,6 +1397,319 @@ static void test_null_reply_is_safe(void) {
 }
 
 // =====================================================================================================================
+// 8. Protocolo v3: calibración por esquinas (mapa de apuntado, JOG, LASER, CORNER, CAL FIT, AIM)
+// =====================================================================================================================
+
+static const double kPi = 3.14159265358979323846;
+
+// Cardán ideal frente a una pared vertical a 300 mm: la celda (x,y) está en (X, 300, Z) con la celda 10,5 en el eje.
+static void wallAngles(int x, int y, float& pan, float& tilt) {
+  const double X = (x - 10.5) * 10.0, Z = (y - 10.5) * 10.0 + 20.0, D = 300.0;
+  pan = static_cast<float>(90.0 + std::atan2(X, D) * 180.0 / kPi);
+  tilt = static_cast<float>(90.0 + std::atan2(Z, std::hypot(X, D)) * 180.0 / kPi);
+}
+
+// Mismo cardán sobre el tablero horizontal del diseño original (estación por defecto).
+static void boardAngles(int x, int y, float& pan, float& tilt) {
+  const core::ServoCmd c = core::toServo(core::aimAtCell(core::Cell{x, y}, core::defaultStation()), core::defaultCalibration());
+  pan = c.panServoDeg;
+  tilt = c.tiltServoDeg;
+}
+
+static core::GridCal fitWith(void (*model)(int, int, float&, float&), bool withCheck, float* err = nullptr) {
+  core::GridCal g;
+  for (int n = 0; n < (withCheck ? 5 : 4); ++n) {
+    int x, y;
+    core::gridPointCell(n, x, y);
+    model(x, y, g.pan[n], g.tilt[n]);
+    g.has[n] = true;
+  }
+  float e = -2.0f;
+  TEST_ASSERT_TRUE(core::gridFit(g, e));
+  if (err) *err = e;
+  return g;
+}
+
+static void expectGridMatches(const core::GridCal& g, void (*model)(int, int, float&, float&), float tolDeg) {
+  float worst = 0.0f;
+  for (int y = 1; y <= 20; ++y) {
+    for (int x = 1; x <= 20; ++x) {
+      float mp, mt, gp, gt;
+      model(x, y, mp, mt);
+      TEST_ASSERT_TRUE(core::gridAim(g, x, y, gp, gt));
+      worst = fmaxf(worst, fmaxf(fabsf(gp - mp), fabsf(gt - mt)));
+    }
+  }
+  TEST_ASSERT_TRUE_MESSAGE(worst <= tolDeg, ("error máximo " + f2(worst) + " deg").c_str());
+}
+
+static void test_grid_fit_wall_matches_all_400_cells(void) {
+  float err = -2.0f;
+  const core::GridCal g = fitWith(wallAngles, true, &err);
+  TEST_ASSERT_TRUE(g.valid);
+  TEST_ASSERT_TRUE(err >= 0.0f && err < 0.01f);          // el punto de control (11,11) cae donde se midió
+  expectGridMatches(g, wallAngles, 0.02f);
+}
+
+static void test_grid_fit_horizontal_board_matches_all_400_cells(void) {
+  float err = -2.0f;
+  const core::GridCal g = fitWith(boardAngles, true, &err);
+  TEST_ASSERT_TRUE(err >= 0.0f && err < 0.01f);
+  expectGridMatches(g, boardAngles, 0.02f);
+}
+
+static void test_grid_fit_without_control_point_and_error_cases(void) {
+  float err = 0.0f;
+  core::GridCal g = fitWith(wallAngles, false, &err);
+  TEST_ASSERT_TRUE(err < 0.0f);                          // sin punto de control no hay error que informar
+  core::GridCal missing = g;
+  missing.has[2] = false;
+  missing.valid = false;
+  TEST_ASSERT_FALSE(core::gridFit(missing, err));       // falta una esquina
+  core::GridCal flat = g;                                // las 4 esquinas en el mismo punto: degenerado
+  for (int i = 0; i < 4; ++i) { flat.pan[i] = 90.0f; flat.tilt[i] = 90.0f; }
+  TEST_ASSERT_FALSE(core::gridFit(flat, err));
+  TEST_ASSERT_FALSE(flat.valid);
+  float p, t;
+  TEST_ASSERT_FALSE(core::gridAim(flat, 5, 5, p, t));   // sin mapa válido no se apunta
+  TEST_ASSERT_FALSE(core::gridAim(g, 0, 5, p, t));      // fuera de la matriz
+  TEST_ASSERT_FALSE(core::gridAim(g, 5, 21, p, t));
+}
+
+static void test_grid_control_error_reports_a_bad_corner(void) {
+  core::GridCal g;
+  for (int n = 0; n < 5; ++n) {
+    int x, y;
+    core::gridPointCell(n, x, y);
+    wallAngles(x, y, g.pan[n], g.tilt[n]);
+    g.has[n] = true;
+  }
+  g.pan[2] += 3.0f;                                      // una esquina mal apuntada 3°
+  float err = 0.0f;
+  TEST_ASSERT_TRUE(core::gridFit(g, err));
+  TEST_ASSERT_TRUE_MESSAGE(err > 0.3f, "el punto de control debe delatar una esquina mal apuntada");
+}
+
+static void test_grid_serialize_round_trip_and_corruption(void) {
+  const core::GridCal g = fitWith(wallAngles, true);
+  unsigned char buf[core::GRID_BLOB_SIZE + 1];
+  memset(buf, 0xAA, sizeof buf);
+  TEST_ASSERT_EQUAL_UINT(46, core::GRID_BLOB_SIZE);
+  TEST_ASSERT_EQUAL_UINT(core::GRID_BLOB_SIZE, core::gridSerialize(g, buf, core::GRID_BLOB_SIZE));
+  TEST_ASSERT_EQUAL_HEX8(0xAA, buf[core::GRID_BLOB_SIZE]);   // no escribe de más
+  core::GridCal back;
+  TEST_ASSERT_TRUE(core::gridDeserialize(buf, core::GRID_BLOB_SIZE, back));
+  TEST_ASSERT_TRUE(back.valid);
+  expectGridMatches(back, wallAngles, 0.02f);                // la homografía se recalcula al leer
+  TEST_ASSERT_EQUAL_UINT(0, core::gridSerialize(g, buf, core::GRID_BLOB_SIZE - 1));
+  for (unsigned i = 0; i < core::GRID_BLOB_SIZE; ++i) {      // cualquier byte alterado se rechaza
+    unsigned char bad[core::GRID_BLOB_SIZE];
+    memcpy(bad, buf, sizeof bad);
+    bad[i] ^= 0x01;
+    core::GridCal out;
+    TEST_ASSERT_FALSE_MESSAGE(core::gridDeserialize(bad, core::GRID_BLOB_SIZE, out), ("byte " + num(i)).c_str());
+  }
+  core::GridCal out;
+  TEST_ASSERT_FALSE(core::gridDeserialize(buf, core::GRID_BLOB_SIZE - 1, out));
+  TEST_ASSERT_FALSE(core::gridDeserialize(nullptr, core::GRID_BLOB_SIZE, out));
+}
+
+static void test_parse_v3(void) {
+  const auto ok = [](const char* s, core::CmdType t) {
+    const core::ParseResult r = core::parseLine(s);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(static_cast<int>(core::ParseError::None), static_cast<int>(r.err), s);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(static_cast<int>(t), static_cast<int>(r.cmd.type), s);
+    return r;
+  };
+  const auto bad = [](const char* s, core::ParseError e) {
+    TEST_ASSERT_EQUAL_INT_MESSAGE(static_cast<int>(e), static_cast<int>(core::parseLine(s).err), s);
+  };
+  ok("PT", core::CmdType::Pt);
+  ok("corners", core::CmdType::Corners);
+  ok("LASER", core::CmdType::LaserQuery);
+  ok("laser on", core::CmdType::LaserOn);
+  ok("LASER OFF", core::CmdType::LaserOff);
+  ok("CAL FIT", core::CmdType::CalFit);
+  ok("cal map", core::CmdType::CalMap);
+  core::ParseResult r = ok("JOG -1.5 0.25", core::CmdType::Jog);
+  TEST_ASSERT_EQUAL_FLOAT(-1.5f, r.cmd.a);
+  TEST_ASSERT_EQUAL_FLOAT(0.25f, r.cmd.b);
+  r = ok("GOTO 91 80.5", core::CmdType::Goto);
+  TEST_ASSERT_EQUAL_FLOAT(91.0f, r.cmd.a);
+  TEST_ASSERT_EQUAL_FLOAT(80.5f, r.cmd.b);
+  r = ok("CORNER 3", core::CmdType::Corner);
+  TEST_ASSERT_EQUAL_INT(3, r.cmd.x);
+  r = ok("AIM 12 7", core::CmdType::Aim);
+  TEST_ASSERT_EQUAL_INT(12, r.cmd.x);
+  TEST_ASSERT_EQUAL_INT(7, r.cmd.y);
+  bad("JOG 21 0", core::ParseError::Range);
+  bad("JOG 0 -20.5", core::ParseError::Range);
+  bad("JOG 1", core::ParseError::BadFormat);
+  bad("JOG a b", core::ParseError::BadFormat);
+  bad("GOTO 14 90", core::ParseError::Range);
+  bad("GOTO 90 166", core::ParseError::Range);
+  bad("CORNER 0", core::ParseError::Range);
+  bad("CORNER 6", core::ParseError::Range);
+  bad("CORNER", core::ParseError::BadFormat);
+  bad("CORNER 1.5", core::ParseError::BadFormat);
+  bad("AIM 0 5", core::ParseError::Range);
+  bad("AIM 5 21", core::ParseError::Range);
+  bad("AIM (5,5)", core::ParseError::BadFormat);
+  bad("LASER MAYBE", core::ParseError::Unknown);
+  bad("LASER ON NOW", core::ParseError::BadFormat);
+  bad("PT 1", core::ParseError::BadFormat);
+  bad("CAL FIT 1", core::ParseError::BadFormat);
+}
+
+// Lleva el cardán a la celda con GOTO y registra el punto n (como hace la app con la cruceta + «esta es la esquina»).
+static void recordPoint(Rig& r, int n, void (*model)(int, int, float&, float&)) {
+  int x, y;
+  core::gridPointCell(n - 1, x, y);
+  float p, t;
+  model(x, y, p, t);
+  const std::vector<std::string> go = r.send("GOTO " + f2(p) + " " + f2(t));
+  TEST_ASSERT_EQUAL_STRING(("OK JOG " + f2(p) + " " + f2(t)).c_str(), go.at(0).c_str());
+  const std::vector<std::string> c = r.send("CORNER " + num(n));
+  TEST_ASSERT_EQUAL_STRING(("OK CORNER " + num(n) + " " + f2(p) + " " + f2(t)).c_str(), c.at(0).c_str());
+}
+
+static void test_calibration_flow_persists_and_drives_shots(void) {
+  Rig r;
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GEO");
+  EXPECT_REPLIES(r.send("CORNERS"), "CORNERS 00000 0");
+  EXPECT_REPLIES(r.send("PT"), "PT 90.00 90.00");
+  EXPECT_REPLIES(r.send("CAL FIT"), "ERR NODATA");
+  for (int n = 1; n <= 3; ++n) recordPoint(r, n, wallAngles);
+  EXPECT_REPLIES(r.send("CAL FIT"), "ERR NODATA");                 // faltan esquinas
+  recordPoint(r, 4, wallAngles);
+  recordPoint(r, 5, wallAngles);
+  EXPECT_REPLIES(r.send("CORNERS"), "CORNERS 11111 0");
+  {
+    const std::vector<std::string> fit = r.send("CAL FIT");              // error del control ≈ 0 (ángulos redondeados a 0,01°)
+    TEST_ASSERT_EQUAL_UINT(1, fit.size());
+    TEST_ASSERT_TRUE_MESSAGE(fit[0].rfind("OK FIT 0.0", 0) == 0, fit[0].c_str());
+  }
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GRID");
+  EXPECT_REPLIES(r.send("CORNERS"), "CORNERS 11111 1");
+
+  // Con el mapa, un disparo va a los ángulos medidos (no a los de la geometría por defecto).
+  float p, t;
+  wallAngles(7, 13, p, t);
+  EXPECT_REPLIES(r.send("(7,13)"), "OK (7,13)");
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, p, r.pan.lastDeg);
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, t, r.tilt.lastDeg);
+  // AIM mueve sin tocar el láser.
+  const size_t before = mark(r);
+  wallAngles(18, 3, p, t);
+  EXPECT_REPLIES(r.send("AIM 18 3"), "OK AIM 18 3");
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, p, r.pan.lastDeg);
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, t, r.tilt.lastDeg);
+  for (size_t i = before; i < r.log.events.size(); ++i) TEST_ASSERT_TRUE(r.log.events[i].kind != Ev::LaserSet);
+
+  // Guardar y reiniciar el módulo: el mapa vuelve solo.
+  EXPECT_REPLIES(r.send("CAL SAVE"), "OK SAVE");
+  TEST_ASSERT_TRUE(r.gridStore.hasData);
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GRID");
+  EXPECT_REPLIES(r.send("CORNERS"), "CORNERS 11111 1");
+  // CAL RESET lo borra todo y vuelve a la geometría.
+  EXPECT_REPLIES(r.send("CAL RESET"), "OK RESET");
+  TEST_ASSERT_FALSE(r.gridStore.hasData);
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GEO");
+  EXPECT_REPLIES(r.send("CORNERS"), "CORNERS 00000 0");
+}
+
+static void test_calibration_recording_a_corner_invalidates_the_map(void) {
+  Rig r;
+  r.ctrl.begin();
+  for (int n = 1; n <= 4; ++n) recordPoint(r, n, wallAngles);
+  EXPECT_REPLIES(r.send("CAL FIT"), "OK FIT -");                    // sin punto de control: guion
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GRID");
+  recordPoint(r, 2, wallAngles);                                    // volver a registrar una esquina invalida el mapa
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GEO");
+  EXPECT_REPLIES(r.send("CORNERS"), "CORNERS 11110 0");
+  EXPECT_REPLIES(r.send("CAL FIT"), "OK FIT -");
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GRID");
+  // Un mapa degenerado (4 esquinas iguales) no se acepta y deja la geometría.
+  for (int n = 1; n <= 4; ++n) {
+    EXPECT_REPLIES(r.send("GOTO 90 90"), "OK JOG 90.00 90.00");
+    r.send("CORNER " + num(n));
+  }
+  EXPECT_REPLIES(r.send("CAL FIT"), "ERR FIT");
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GEO");
+}
+
+static void test_jog_goto_limits_and_stop(void) {
+  Rig r;
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("JOG 2 -1.5"), "OK JOG 92.00 88.50");
+  EXPECT_REPLIES(r.send("PT"), "PT 92.00 88.50");
+  EXPECT_REPLIES(r.send("JOG -20 20"), "OK JOG 72.00 108.50");
+  for (int i = 0; i < 4; ++i) EXPECT_REPLIES(r.send("JOG 20 0"), "OK JOG " + f2(92.0 + 20.0 * i) + " 108.50");
+  EXPECT_REPLIES(r.send("JOG 20 0"), "ERR LIMIT");                    // 172° sale de 15..165
+  EXPECT_REPLIES(r.send("PT"), "PT 152.00 108.50");                   // lo rechazado no mueve nada
+  EXPECT_REPLIES(r.send("GOTO 90 90"), "OK JOG 90.00 90.00");
+  EXPECT_REPLIES(r.send("JOG 25 0"), "ERR RANGE");
+  // Un STOP a mitad de movimiento: responde ERR STOP y apaga el láser.
+  r.log.hook = [&](const Event& e) {
+    if (e.kind == Ev::ServoWrite && e.deg > 95.0f) r.ctrl.requestStop();
+  };
+  EXPECT_REPLIES(r.send("JOG 10 0"), "ERR STOP");
+  r.log.hook = nullptr;
+  TEST_ASSERT_FALSE(r.log.laserOn);
+}
+
+static void test_aim_laser_on_off_timeout_stop_and_fire(void) {
+  Rig r;
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("LASER"), "LASER OFF");
+  EXPECT_REPLIES(r.send("LASER ON"), "OK LASER ON");
+  TEST_ASSERT_TRUE(r.log.laserOn);
+  EXPECT_REPLIES(r.send("LASER"), "LASER ON");
+  r.ctrl.tick();
+  TEST_ASSERT_TRUE(r.log.laserOn);                                   // aún dentro de los 120 s
+  r.log.nowMs += cfg::AIM_LASER_MAX_MS;
+  r.ctrl.tick();
+  TEST_ASSERT_FALSE(r.log.laserOn);                                  // se apagó solo
+  EXPECT_REPLIES(r.send("LASER"), "LASER OFF");
+  EXPECT_REPLIES(r.send("LASER ON"), "OK LASER ON");
+  EXPECT_REPLIES(r.send("STOP"), "OK STOP");
+  TEST_ASSERT_FALSE(r.log.laserOn);
+  EXPECT_REPLIES(r.send("LASER"), "LASER OFF");
+  EXPECT_REPLIES(r.send("LASER ON"), "OK LASER ON");
+  EXPECT_REPLIES(r.send("(5,5)"), "OK (5,5)");                       // un disparo manda sobre el láser de apuntado
+  TEST_ASSERT_FALSE(r.log.laserOn);
+  EXPECT_REPLIES(r.send("LASER"), "LASER OFF");
+  EXPECT_REPLIES(r.send("LASER ON"), "OK LASER ON");
+  EXPECT_REPLIES(r.send("LASER OFF"), "OK LASER OFF");
+  TEST_ASSERT_FALSE(r.log.laserOn);
+}
+
+static void test_calibration_commands_respect_arming(void) {
+  Rig r;
+  r.ctrl.begin();
+  int left = 0;
+  core::Controller::Link l;
+  l.armedSeconds = [&]() { return left; };
+  r.ctrl.setLink(l);
+  const size_t before = mark(r);
+  EXPECT_REPLIES(r.send("JOG 1 1"), "ERR DISARMED");
+  EXPECT_REPLIES(r.send("GOTO 90 90"), "ERR DISARMED");
+  EXPECT_REPLIES(r.send("LASER ON"), "ERR DISARMED");
+  EXPECT_REPLIES(r.send("AIM 5 5"), "ERR DISARMED");
+  for (size_t i = before; i < r.log.events.size(); ++i) {
+    TEST_ASSERT_TRUE(r.log.events[i].kind != Ev::LaserSet && r.log.events[i].kind != Ev::ServoWrite &&
+                     r.log.events[i].kind != Ev::ServoAttach);
+  }
+  EXPECT_REPLIES(r.send("PT"), "PT 90.00 90.00");                    // las consultas nunca se bloquean
+  EXPECT_REPLIES(r.send("CORNERS"), "CORNERS 00000 0");
+  EXPECT_REPLIES(r.send("LASER OFF"), "OK LASER OFF");
+  left = 30;
+  EXPECT_REPLIES(r.send("JOG 1 1"), "OK JOG 91.00 91.00");
+}
+
+// =====================================================================================================================
 
 int main() {
   UNITY_BEGIN();
@@ -1459,6 +1773,19 @@ int main() {
   RUN_TEST(test_hello_default_and_configured);
   RUN_TEST(test_mode_query_and_switch);
   RUN_TEST(test_arm_blocks_remote_fire_but_never_stop);
+
+  // 8. Protocolo v3: calibración por esquinas
+  RUN_TEST(test_grid_fit_wall_matches_all_400_cells);
+  RUN_TEST(test_grid_fit_horizontal_board_matches_all_400_cells);
+  RUN_TEST(test_grid_fit_without_control_point_and_error_cases);
+  RUN_TEST(test_grid_control_error_reports_a_bad_corner);
+  RUN_TEST(test_grid_serialize_round_trip_and_corruption);
+  RUN_TEST(test_parse_v3);
+  RUN_TEST(test_calibration_flow_persists_and_drives_shots);
+  RUN_TEST(test_calibration_recording_a_corner_invalidates_the_map);
+  RUN_TEST(test_jog_goto_limits_and_stop);
+  RUN_TEST(test_aim_laser_on_off_timeout_stop_and_fire);
+  RUN_TEST(test_calibration_commands_respect_arming);
 
   return UNITY_END();
 }

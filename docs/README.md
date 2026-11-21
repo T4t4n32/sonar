@@ -40,6 +40,7 @@ Estados: **VIGENTE** · **PARCIAL** (útil, con partes superadas) · **HISTÓRIC
 | Documento | Qué es | Estado |
 |---|---|---|
 | [PROTOCOLO](03-firmware-y-app/PROTOCOLO.md) | contrato de líneas de texto (v1 + v2) | VIGENTE |
+| [CALIBRACION](03-firmware-y-app/CALIBRACION.md) | **cómo calibrar el apuntado a las 4 esquinas de la matriz (app o USB)** | VIGENTE |
 | [APP_SONAR](03-firmware-y-app/APP_SONAR.md) | **plan de la app Android propia (APK): reglas del profesor 15-nov, pantallas, arquitectura, fases** | VIGENTE |
 | [BRINGUP](03-firmware-y-app/BRINGUP.md) | puesta en marcha en banco, paso a paso | VIGENTE |
 | [CONTROL1](03-firmware-y-app/CONTROL1.md) | lista para el control del 8-nov | VIGENTE |

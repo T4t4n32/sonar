@@ -6,7 +6,7 @@ export type TransportKind = LineTransport['kind']
 export const KIND_LABEL: Record<TransportKind, string> = { bluetooth: 'Bluetooth', wifi: 'Wi-Fi mantenimiento', sim: 'Simulado' }
 
 /** Latencias del simulado en la app: se nota el disparo, el TEST dura ~3 s. */
-export const APP_SIM: SimOptions = { latency: { shotMs: 900, testStepMs: 600, markMs: 600, cmdMs: 30 } }
+export const APP_SIM: SimOptions = { latency: { shotMs: 900, testStepMs: 600, markMs: 600, cmdMs: 30, moveMs: 250 }, caps: ['grid'] }
 
 export async function createTransport(kind: TransportKind): Promise<LineTransport> {
   switch (kind) {

@@ -70,6 +70,10 @@ bool calibrationValid(const Calibration& c) {
   return calValuesValid(v);
 }
 
+bool servoSafe(float pan, float tilt) {
+  return pan >= cfg::SERVO_SAFE_MIN && pan <= cfg::SERVO_SAFE_MAX && tilt >= cfg::SERVO_SAFE_MIN && tilt <= cfg::SERVO_SAFE_MAX;
+}
+
 }  // namespace
 
 Controller::Controller(hal::Servo& pan, hal::Servo& tilt, hal::Laser& laser, hal::Buzzer& buzzer,
@@ -87,6 +91,13 @@ void Controller::begin() {
     cal_ = defaultCalibration();
   }
 
+  grid_ = GridCal();
+  if (gridStore_) {
+    GridCal g;
+    if (gridStore_->load(g)) grid_ = g;
+  }
+  aimLaserOn_ = false;
+
   pan_.detach();       // servos libres hasta el primer disparo
   tilt_.detach();
   servosAttached_ = false;
@@ -98,7 +109,38 @@ void Controller::begin() {
 
 void Controller::requestStop() {
   stop_ = true;
+  aimLaserOn_ = false;
   laser_.set(false);   // apagado inmediato (un GPIO); el disparo en curso lo notará y responderá ERR STOP
+}
+
+void Controller::tick() {
+  if (aimLaserOn_ && !busy_ && static_cast<uint32_t>(clock_.ms() - aimLaserSince_) >= cfg::AIM_LASER_MAX_MS) {
+    laser_.set(false);   // LASER ON se olvida encendido: se apaga solo
+    aimLaserOn_ = false;
+  }
+}
+
+void Controller::attachServos() {
+  if (servosAttached_) return;
+  pan_.attach();
+  tilt_.attach();
+  servosAttached_ = true;
+  pan_.writeDeg(panNowDeg_);     // PWM definido desde el primer instante: el servo no salta a un valor arbitrario
+  tilt_.writeDeg(tiltNowDeg_);
+}
+
+bool Controller::targetFor(Cell c, ServoCmd& out) const {
+  if (grid_.valid) {
+    float p, t;
+    if (!gridAim(grid_, c.x, c.y, p, t) || !servoSafe(p, t)) return false;
+    out.panServoDeg = p;
+    out.tiltServoDeg = t;
+    return true;
+  }
+  const Aim aim = aimAtCell(c, cal_.station);
+  if (!aim.ok) return false;
+  out = toServo(aim, cal_);
+  return true;
 }
 
 bool Controller::busy() const { return busy_; }
@@ -113,8 +155,8 @@ void Controller::moveAxis(hal::Servo& s, float& nowDeg, float targetDeg) {
 }
 
 bool Controller::fire(Cell c, std::string& errLine) {
-  const Aim aim = aimAtCell(c, cal_.station);
-  if (!aim.ok) {
+  ServoCmd target;
+  if (!targetFor(c, target)) {
     errLine = "ERR LIMIT";
     return false;
   }
@@ -126,18 +168,11 @@ bool Controller::fire(Cell c, std::string& errLine) {
     return false;
   };
 
+  aimLaserOn_ = false;             // un disparo manda sobre el láser de apuntado
   laser_.set(false);
   if (stop_) return stopped();
 
-  const ServoCmd target = toServo(aim, cal_);
-
-  if (!servosAttached_) {
-    pan_.attach();
-    tilt_.attach();
-    servosAttached_ = true;
-    pan_.writeDeg(panNowDeg_);     // PWM definido desde el primer instante: el servo no salta a un valor arbitrario
-    tilt_.writeDeg(tiltNowDeg_);
-  }
+  attachServos();
 
   moveAxis(pan_, panNowDeg_, target.panServoDeg);
   moveAxis(tilt_, tiltNowDeg_, target.tiltServoDeg);
@@ -257,15 +292,130 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
       }
       break;
 
-    case CmdType::CalSave:
-      say(store_.save(cal_) ? "OK SAVE" : "ERR STORE");
+    case CmdType::CalSave: {
+      bool ok = store_.save(cal_);
+      if (gridStore_) {
+        bool any = false;
+        for (int i = 0; i < GRID_PTS; ++i) any = any || grid_.has[i];
+        if (any) {
+          ok = gridStore_->save(grid_) && ok;
+        } else {
+          gridStore_->erase();
+        }
+      }
+      say(ok ? "OK SAVE" : "ERR STORE");
       break;
+    }
 
     case CmdType::CalReset:
       cal_ = defaultCalibration();
       store_.erase();
+      grid_ = GridCal();
+      if (gridStore_) gridStore_->erase();
       say("OK RESET");
       break;
+
+    // ---- Protocolo v3: calibración por esquinas
+    case CmdType::Pt:
+      say("PT " + fmt2(panNowDeg_) + " " + fmt2(tiltNowDeg_));
+      break;
+
+    case CmdType::Jog:
+    case CmdType::Goto: {
+      if (disarmed()) {
+        say("ERR DISARMED");
+        break;
+      }
+      const bool rel = pr.cmd.type == CmdType::Jog;
+      const float p = rel ? panNowDeg_ + pr.cmd.a : pr.cmd.a;
+      const float t = rel ? tiltNowDeg_ + pr.cmd.b : pr.cmd.b;
+      if (!servoSafe(p, t)) {
+        say("ERR LIMIT");
+        break;
+      }
+      attachServos();
+      moveAxis(pan_, panNowDeg_, p);
+      moveAxis(tilt_, tiltNowDeg_, t);
+      if (stop_) {
+        say("ERR STOP");
+      } else {
+        say("OK JOG " + fmt2(panNowDeg_) + " " + fmt2(tiltNowDeg_));
+      }
+      break;
+    }
+
+    case CmdType::LaserOn:
+      if (disarmed()) {
+        say("ERR DISARMED");
+        break;
+      }
+      laser_.set(true);
+      aimLaserOn_ = true;
+      aimLaserSince_ = clock_.ms();
+      say("OK LASER ON");
+      break;
+
+    case CmdType::LaserOff:
+      laser_.set(false);
+      aimLaserOn_ = false;
+      say("OK LASER OFF");
+      break;
+
+    case CmdType::LaserQuery:
+      say(aimLaserOn_ ? "LASER ON" : "LASER OFF");
+      break;
+
+    case CmdType::Corner: {
+      const int i = pr.cmd.x - 1;
+      grid_.has[i] = true;
+      grid_.pan[i] = panNowDeg_;
+      grid_.tilt[i] = tiltNowDeg_;
+      if (i < 4) grid_.valid = false;   // cambiar una esquina invalida el mapa hasta el próximo CAL FIT
+      say("OK CORNER " + std::to_string(pr.cmd.x) + " " + fmt2(panNowDeg_) + " " + fmt2(tiltNowDeg_));
+      break;
+    }
+
+    case CmdType::Corners: {
+      std::string bits;
+      for (int i = 0; i < GRID_PTS; ++i) bits += grid_.has[i] ? '1' : '0';
+      say("CORNERS " + bits + " " + (grid_.valid ? "1" : "0"));
+      break;
+    }
+
+    case CmdType::CalFit: {
+      if (!gridHasCorners(grid_)) {
+        say("ERR NODATA");
+        break;
+      }
+      float err = -1.0f;
+      if (!gridFit(grid_, err)) {
+        say("ERR FIT");
+      } else {
+        say(err < 0.0f ? std::string("OK FIT -") : "OK FIT " + fmt2(err));
+      }
+      break;
+    }
+
+    case CmdType::CalMap:
+      say(grid_.valid ? "MAP GRID" : "MAP GEO");
+      break;
+
+    case CmdType::Aim: {
+      if (disarmed()) {
+        say("ERR DISARMED");
+        break;
+      }
+      ServoCmd target;
+      if (!targetFor(Cell{pr.cmd.x, pr.cmd.y}, target) || !servoSafe(target.panServoDeg, target.tiltServoDeg)) {
+        say("ERR LIMIT");
+        break;
+      }
+      attachServos();
+      moveAxis(pan_, panNowDeg_, target.panServoDeg);
+      moveAxis(tilt_, tiltNowDeg_, target.tiltServoDeg);
+      say(stop_ ? "ERR STOP" : "OK AIM " + std::to_string(pr.cmd.x) + " " + std::to_string(pr.cmd.y));
+      break;
+    }
 
     case CmdType::MarkHit:
       led_.set(true);

@@ -56,3 +56,25 @@ Todo lo anterior sigue igual. Un cliente v1 no necesita nada de esto. Diseño y 
 - Con armado exigido (modo `WIFI`) y vencido, `(x,y)` y `TEST` responden **`ERR DISARMED`** sin mover nada. `STOP`, `PING`, `HELLO`, `MODE`, `ARM`, `CAL …` y `MARK …` nunca se bloquean.
 - `MODE X` con `X` distinto de `BT`/`WIFI` → `ERR UNKNOWN`; argumentos de más en `HELLO`/`ARM`/`MODE BT WIFI` → `ERR FORMAT`.
 - Líneas de evento no solicitadas (prefijo `EVT `) llegarán con el transporte WebSocket (aún no implementado).
+
+## Protocolo v3: calibración por esquinas (2026-11-21)
+
+Compatible hacia atrás. El módulo lo anuncia en `HELLO` con `caps = grid`. Permite apuntar el láser **a mano** a las 4 esquinas reales de la matriz y que el módulo calcule el resto (una homografía), sin conocer la geometría del montaje. Guía de uso: [`CALIBRACION.md`](CALIBRACION.md).
+
+| Línea | Efecto | Respuestas |
+|---|---|---|
+| `PT` | ángulos de servo actuales (los que el módulo ordenó; 90 90 al arrancar) | `PT <pan> <tilt>` (2 decimales) |
+| `JOG <dp> <dt>` | mueve en **relativo**, grados de servo, cada uno en −20…20 | `OK JOG <pan> <tilt>` (absolutos nuevos) · `ERR RANGE` · `ERR LIMIT` (saldría de 15…165°; no mueve) · `ERR STOP` · `ERR DISARMED` |
+| `GOTO <pan> <tilt>` | mueve a ángulos de servo absolutos (15…165) | igual que `JOG` |
+| `LASER ON` / `LASER OFF` | enciende/apaga el láser **de apuntado** (se apaga solo a los 120 s; `STOP` también) | `OK LASER ON` / `OK LASER OFF` · `ERR DISARMED` |
+| `LASER` | consulta | `LASER ON` / `LASER OFF` |
+| `CORNER <n>` | guarda los ángulos actuales como punto *n*: 1=(1,1) 2=(20,1) 3=(20,20) 4=(1,20) 5=(11,11, control opcional) | `OK CORNER <n> <pan> <tilt>` · `ERR RANGE` |
+| `CORNERS` | qué puntos hay y si el mapa está ajustado | `CORNERS <5 dígitos 0/1> <0/1>` (p. ej. `CORNERS 11111 1`) |
+| `CAL FIT` | calcula el mapa con las 4 esquinas; si hay punto 5, informa el error | `OK FIT <err>` (grados; `-` sin punto 5) · `ERR NODATA` (faltan esquinas) · `ERR FIT` (degenerado) |
+| `CAL MAP` | qué usa el disparo | `MAP GRID` (mapa por esquinas) / `MAP GEO` (geometría de `config.h`) |
+| `AIM <x> <y>` | mueve a la celda con el mapa actual, **sin tocar el láser** (enteros 1…20, sin paréntesis) | `OK AIM <x> <y>` · `ERR LIMIT` · `ERR STOP` · `ERR DISARMED` |
+
+- `CAL SAVE` / `CAL RESET` guardan/borran **también** el mapa (NVS, clave `grid`); al arrancar, el mapa guardado se recarga solo. Registrar de nuevo una esquina (1…4) invalida el mapa hasta el siguiente `CAL FIT`.
+- Con el mapa activo, `(x,y)` y `TEST` apuntan con él; sin mapa, con la geometría (v1). Un disparo (`(x,y)`, `TEST`) apaga el láser de apuntado.
+- Los límites de seguridad 15…165° rigen `JOG`, `GOTO` y `AIM`; `STOP` interrumpe cualquiera de ellos (`ERR STOP`).
+- Matemática: con θ = pan y φ = tilt medidos desde 90°, el rayo es `u = tan θ`, `v = tan φ / cos θ`; el plano de la matriz se proyecta a `(u,v)` con una homografía de 8 parámetros, que se resuelve exacta con 4 esquinas. Pruebas nativas: pared vertical y tablero horizontal reproducen las 400 celdas a < 0,02°.

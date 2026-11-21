@@ -28,6 +28,7 @@ static hal_esp32::LedcServo g_tilt(cfg::pins::TILT, 2);
 static hal_esp32::ActiveBuzzer g_buzzer(cfg::pins::BUZZER, g_clock);
 static hal_esp32::LedPin g_led(cfg::pins::LED);
 static hal_esp32::NvsCalStore g_store;
+static hal_esp32::NvsGridStore g_gridStore;
 static core::Controller g_ctrl(g_pan, g_tilt, g_laser, g_buzzer, g_led, g_clock, g_store);
 
 // Transportes.
@@ -113,10 +114,12 @@ void setup() {
   g_btnSince = millis();
 
   g_clock.setIdleHook(idleHook);
+  g_ctrl.setGridStore(&g_gridStore);
   g_ctrl.begin();                                     // láser apagado, calibración cargada, servos libres
   {   // Protocolo v2 (solo HELLO por ahora): el modo real del módulo. Sin cambio de modo ni armado: el comportamiento v1 no varía.
     core::Controller::Link link;
     link.mode = g_maintMode ? "WIFI" : "BT";
+    link.caps = "grid";                               // protocolo v3: calibración por esquinas (JOG, CORNER, CAL FIT, AIM…)
     g_ctrl.setLink(link);
   }
 
@@ -142,6 +145,7 @@ void loop() {
     }
   }
 
+  g_ctrl.tick();                                      // apaga el láser de apuntado (LASER ON) a los 120 s
   pollButton();
-  delay(1);                                           // cede la CPU a las tareas de BT / Wi-Fi
+  delay(1);                                        // cede la CPU a las tareas de BT / Wi-Fi
 }

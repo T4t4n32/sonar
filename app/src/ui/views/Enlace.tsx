@@ -3,6 +3,7 @@ import { useEffect } from 'preact/hooks'
 import { CAL_RANGES, app } from '../../state'
 import { KIND_LABEL, type TransportKind } from '../../state/transports'
 import { TEST_POSITIONS } from '../../transport/sim'
+import { Calibrar } from './Calibrar'
 
 const KINDS: TransportKind[] = ['bluetooth', 'wifi', 'sim']
 const calDraft = signal<string[]>(['100', '-65', '180', '0', '0'])
@@ -122,6 +123,7 @@ export function Enlace() {
       {k === 'sim' && <div class="notice"><span>Módulo simulado: practica sin hardware (responde como el real).</span></div>}
       <Modules />
       <TestCard />
+      <Calibrar />
       <details class="card">
         <summary>Guía · emparejar y renombrar</summary>
         <ol>

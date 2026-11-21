@@ -20,4 +20,4 @@ export interface LineTransport {
 
 /** Línea terminal de cada orden (para saber cuándo acabó de responder). */
 export const isTerminal = (line: string): boolean =>
-  /^(OK|ERR|PONG|HELLO|CAL|MODE|ARM|TEST DONE|TEST ABORT)\b/i.test(line)
+  /^(OK|ERR|PONG|HELLO|CAL|MODE|ARM|PT|LASER|CORNERS|MAP|TEST DONE|TEST ABORT)\b/i.test(line)

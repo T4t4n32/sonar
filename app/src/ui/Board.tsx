@@ -11,16 +11,16 @@ const NUMS = Array.from({ length: N }, (_, i) => i + 1)
 /** Etiquetas del eje Y de arriba abajo: (1,1) queda ABAJO, junto a la estación, como en el tablero físico. */
 const NUMS_Y = [...NUMS].reverse()
 const clampCell = (n: number) => Math.max(1, Math.min(N, n))
-function cellFromPointer(e: PointerEvent): Coord {
+export function cellFromPointer(e: PointerEvent): Coord {
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
   return { x: clampCell(Math.floor(((e.clientX - r.left) / r.width) * N) + 1), y: clampCell(N - Math.floor(((e.clientY - r.top) / r.height) * N)) }
 }
 const capture = (e: PointerEvent) => { try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId) } catch { /* sin captura */ } }
 
-const YLab = (p: { y?: number | undefined }) => (
+export const YLab = (p: { y?: number | undefined }) => (
   <div class="ylab" aria-hidden="true">{NUMS_Y.map(n => <i class={`${n % 5 === 0 ? 'm' : ''} ${p.y === n ? 'on' : ''}`}>{n % 5 === 0 || n === 1 || p.y === n ? n : ''}</i>)}</div>
 )
-const XLab = (p: { x?: number | undefined }) => (
+export const XLab = (p: { x?: number | undefined }) => (
   <div class="xlab" aria-hidden="true">{NUMS.map(n => <i class={`${n % 5 === 0 ? 'm' : ''} ${p.x === n ? 'on' : ''}`}>{n % 5 === 0 || n === 1 || p.x === n ? n : ''}</i>)}</div>
 )
 

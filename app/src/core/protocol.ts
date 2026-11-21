@@ -2,7 +2,7 @@
 import { N, type Coord } from './types'
 
 export const MAX_LINE = 64
-export const ERROR_CODES = ['RANGE', 'FORMAT', 'LIMIT', 'BUSY', 'STOP', 'DISARMED', 'UNKNOWN', 'EMPTY', 'TOOLONG', 'STORE'] as const
+export const ERROR_CODES = ['RANGE', 'FORMAT', 'LIMIT', 'BUSY', 'STOP', 'DISARMED', 'UNKNOWN', 'EMPTY', 'TOOLONG', 'STORE', 'NODATA', 'FIT'] as const
 export type ErrCode = (typeof ERROR_CODES)[number]
 export type ModuleMode = 'BT' | 'WIFI'
 export interface CalValues { x: number; y: number; h: number; panTrim: number; tiltTrim: number }
@@ -26,12 +26,29 @@ export type Reply =
   | { t: 'cal'; cal: CalValues }
   | { t: 'mode'; mode: ModuleMode }
   | { t: 'arm'; state: 'NOTREQ' | 'OFF' | 'ON'; seconds?: number }
+  // ---- protocolo v3: calibración de apuntado por esquinas ----
+  | { t: 'pt'; pan: number; tilt: number }                       // PT <pan> <tilt>
+  | { t: 'ok-jog'; pan: number; tilt: number }                   // OK JOG <pan> <tilt>
+  | { t: 'laser'; on: boolean }                                  // LASER ON|OFF (consulta)
+  | { t: 'ok-laser'; on: boolean }                               // OK LASER ON|OFF
+  | { t: 'ok-corner'; n: number; pan: number; tilt: number }     // OK CORNER n pan tilt
+  | { t: 'corners'; mask: boolean[]; fit: boolean }              // CORNERS 11110 0
+  | { t: 'ok-fit'; err: number | null }                          // OK FIT 0.31 | OK FIT -
+  | { t: 'map'; mode: 'GRID' | 'GEO' }                           // MAP GRID | MAP GEO
+  | { t: 'ok-aim'; at: Coord }                                   // OK AIM x y
   | { t: 'unknown'; line: string }
 
 const COORD_RE = /^\(\s*([+-]?\d+)\s*,\s*([+-]?\d+)\s*\)$/
 const toMode = (s: string | undefined): ModuleMode | null => {
   const u = (s ?? '').toUpperCase()
   return u === 'BT' || u === 'WIFI' ? u : null
+}
+/** Número decimal estricto (sin exponente, nan ni inf); null si no lo es. */
+const NUM_RE = /^[+-]?(\d+(\.\d*)?|\.\d+)$/
+const num = (s: string | undefined): number | null => (s !== undefined && NUM_RE.test(s) ? Number(s) : null)
+const onOff = (s: string | undefined): boolean | null => {
+  const u = (s ?? '').toUpperCase()
+  return u === 'ON' ? true : u === 'OFF' ? false : null
 }
 
 export function parseReply(raw: string): Reply {
@@ -47,7 +64,40 @@ export function parseReply(raw: string): Reply {
       if (m) return { t: 'ok-shot', at: { x: Number(m[1]), y: Number(m[2]) } }
       if (p.length === 2 && (w2 === 'STOP' || w2 === 'MARK' || w2 === 'CAL' || w2 === 'SAVE' || w2 === 'RESET')) return { t: 'ok', what: w2 }
       if (p.length === 3 && w2 === 'MODE') { const mo = toMode(p[2]); if (mo) return { t: 'ok', what: 'MODE', mode: mo } }
+      if (p.length === 4 && w2 === 'JOG') {
+        const [pan, tilt] = [num(p[2]), num(p[3])]
+        return pan !== null && tilt !== null ? { t: 'ok-jog', pan, tilt } : unknown
+      }
+      if (p.length === 3 && w2 === 'LASER') { const on = onOff(p[2]); return on === null ? unknown : { t: 'ok-laser', on } }
+      if (p.length === 5 && w2 === 'CORNER') {
+        const [n, pan, tilt] = [num(p[2]), num(p[3]), num(p[4])]
+        return n !== null && Number.isInteger(n) && n >= 1 && n <= 5 && pan !== null && tilt !== null ? { t: 'ok-corner', n, pan, tilt } : unknown
+      }
+      if (p.length === 3 && w2 === 'FIT') {
+        if (p[2] === '-') return { t: 'ok-fit', err: null }
+        const err = num(p[2])
+        return err !== null ? { t: 'ok-fit', err } : unknown
+      }
+      if (p.length === 4 && w2 === 'AIM') {
+        const [x, y] = [num(p[2]), num(p[3])]
+        return x !== null && y !== null && Number.isInteger(x) && Number.isInteger(y) ? { t: 'ok-aim', at: { x, y } } : unknown
+      }
       return unknown
+    }
+    case 'PT': {
+      const [pan, tilt] = [num(p[1]), num(p[2])]
+      return p.length === 3 && pan !== null && tilt !== null ? { t: 'pt', pan, tilt } : unknown
+    }
+    case 'LASER': {
+      const on = onOff(p[1])
+      return p.length === 2 && on !== null ? { t: 'laser', on } : unknown
+    }
+    case 'CORNERS': {
+      if (p.length !== 3 || !/^[01]{5}$/.test(p[1]!) || (p[2] !== '0' && p[2] !== '1')) return unknown
+      return { t: 'corners', mask: [...p[1]!].map(c => c === '1'), fit: p[2] === '1' }
+    }
+    case 'MAP': {
+      return p.length === 2 && (w2 === 'GRID' || w2 === 'GEO') ? { t: 'map', mode: w2 } : unknown
     }
     case 'ERR': {
       const code = w2 as ErrCode
@@ -101,6 +151,8 @@ export function friendlyError(code: ErrCode | string): string {
     case 'EMPTY': return 'Se envió una línea vacía.'
     case 'TOOLONG': return 'La orden supera los 64 caracteres.'
     case 'STORE': return 'El módulo no pudo guardar en su memoria (NVS).'
+    case 'NODATA': return 'Faltan esquinas: registra las 4 (1,1) (20,1) (20,20) (1,20) antes de calcular.'
+    case 'FIT': return 'Las 4 esquinas no sirven para calcular (están alineadas o repetidas). Vuelve a apuntar a cada esquina.'
     default: return `Error del módulo: ${code}`
   }
 }
@@ -114,9 +166,22 @@ export type Command =
   | { t: 'cal-set'; cal: CalValues }
   | { t: 'mode-query' }
   | { t: 'mode-set'; mode: ModuleMode }
+  // protocolo v3
+  | { t: 'pt' }
+  | { t: 'jog'; dp: number; dt: number }
+  | { t: 'goto'; pan: number; tilt: number }
+  | { t: 'laser-set'; on: boolean } | { t: 'laser-query' }
+  | { t: 'corner'; n: number } | { t: 'corners' }
+  | { t: 'cal-fit' } | { t: 'cal-map' }
+  | { t: 'aim'; at: Coord }
   | { t: 'error'; code: ErrCode }
 
 const CAL_RANGES: [number, number][] = [[-200, 400], [-300, 400], [50, 400], [-10, 10], [-10, 10]]
+
+/** Límites de la calibración de apuntado (ángulos de servo en grados). */
+export const JOG_MAX = 20
+export const SERVO_MIN = 15
+export const SERVO_MAX = 165
 
 export function parseCommand(raw: string): Command {
   const line = raw.replace(/[\r\n]+$/g, '')
@@ -146,9 +211,43 @@ export function parseCommand(raw: string): Command {
       if (a.length === 0) return { t: 'mode-query' }
       if (a.length > 1) return err('FORMAT')
       return a[0] === 'BT' || a[0] === 'WIFI' ? { t: 'mode-set', mode: a[0] } : err('UNKNOWN')
+    case 'PT': return a.length ? err('FORMAT') : { t: 'pt' }
+    case 'CORNERS': return a.length ? err('FORMAT') : { t: 'corners' }
+    case 'JOG': {
+      if (a.length !== 2) return err('FORMAT')
+      const [dp, dt] = [num(p[1]), num(p[2])]
+      if (dp === null || dt === null) return err('FORMAT')
+      return Math.abs(dp) > JOG_MAX || Math.abs(dt) > JOG_MAX ? err('RANGE') : { t: 'jog', dp, dt }
+    }
+    case 'GOTO': {
+      if (a.length !== 2) return err('FORMAT')
+      const [pan, tilt] = [num(p[1]), num(p[2])]
+      if (pan === null || tilt === null) return err('FORMAT')
+      return pan < SERVO_MIN || pan > SERVO_MAX || tilt < SERVO_MIN || tilt > SERVO_MAX ? err('RANGE') : { t: 'goto', pan, tilt }
+    }
+    case 'LASER': {
+      if (a.length === 0) return { t: 'laser-query' }
+      if (a.length > 1) return err('FORMAT')
+      return a[0] === 'ON' || a[0] === 'OFF' ? { t: 'laser-set', on: a[0] === 'ON' } : err('FORMAT')
+    }
+    case 'CORNER': {
+      if (a.length !== 1) return err('FORMAT')
+      const n = num(p[1])
+      if (n === null || !Number.isInteger(n)) return err('FORMAT')
+      return n < 1 || n > 5 ? err('RANGE') : { t: 'corner', n }
+    }
+    case 'AIM': {
+      if (a.length !== 2) return err('FORMAT')
+      const [x, y] = [num(p[1]), num(p[2])]
+      if (x === null || y === null || !Number.isInteger(x) || !Number.isInteger(y)) return err('FORMAT')
+      const at = { x, y }
+      return isValidCoord(at) ? { t: 'aim', at } : err('RANGE')
+    }
     case 'CAL': {
       if (a.length === 0) return err('FORMAT')
       const sub = a[0]
+      if (sub === 'FIT') return a.length === 1 ? { t: 'cal-fit' } : err('FORMAT')
+      if (sub === 'MAP') return a.length === 1 ? { t: 'cal-map' } : err('FORMAT')
       if (sub === 'SHOW') return a.length === 1 ? { t: 'cal-show' } : err('FORMAT')
       if (sub === 'SAVE') return a.length === 1 ? { t: 'cal-save' } : err('FORMAT')
       if (sub === 'RESET') return a.length === 1 ? { t: 'cal-reset' } : err('FORMAT')
@@ -167,3 +266,14 @@ export function parseCommand(raw: string): Command {
 
 const f2 = (v: number) => v.toFixed(2)
 export const formatCal = (c: CalValues): string => `CAL ${f2(c.x)} ${f2(c.y)} ${f2(c.h)} ${f2(c.panTrim)} ${f2(c.tiltTrim)}`
+
+// ---------- órdenes v3 (app -> módulo) ----------
+/** Ángulo con 2 decimales y sin «-0.00». */
+export const fmtAngle = (v: number): string => { const s = v.toFixed(2); return s === '-0.00' ? '0.00' : s }
+export const formatJog = (dp: number, dt: number): string => `JOG ${fmtAngle(dp)} ${fmtAngle(dt)}`
+export const formatGoto = (pan: number, tilt: number): string => `GOTO ${fmtAngle(pan)} ${fmtAngle(tilt)}`
+export const formatAim = (c: Coord): string => `AIM ${c.x} ${c.y}`
+export const formatLaser = (on: boolean): string => `LASER ${on ? 'ON' : 'OFF'}`
+export const formatCorner = (n: number): string => `CORNER ${n}`
+/** Las cuatro esquinas (+ control) en el orden del módulo: 1=(1,1) abajo-izquierda … 5=(11,11) centro. */
+export const CORNER_CELLS: Coord[] = [{ x: 1, y: 1 }, { x: 20, y: 1 }, { x: 20, y: 20 }, { x: 1, y: 20 }, { x: 11, y: 11 }]

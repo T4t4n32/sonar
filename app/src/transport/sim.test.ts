@@ -283,3 +283,150 @@ describe('SimTransport: rival y testigo automático', () => {
     expect(got).toEqual(['EVT hola'])
   })
 })
+
+describe('SimTransport: calibración de apuntado (protocolo v3)', () => {
+  const corners = [{ x: 1, y: 1 }, { x: 20, y: 1 }, { x: 20, y: 20 }, { x: 1, y: 20 }]
+  /** lleva el gimbal a los ángulos exactos de una celda (operario perfecto) y registra la esquina n */
+  const record = async (t: SimTransport, n: number, c: { x: number; y: number }) => {
+    const a = t.truth(c)
+    expect((await t.request(`GOTO ${a.pan.toFixed(2)} ${a.tilt.toFixed(2)}`, 100))[0]).toMatch(/^OK JOG /)
+    return t.request(`CORNER ${n}`, 100)
+  }
+
+  it('PT, LASER y estado inicial', async () => {
+    const t = await mk()
+    expect(await t.request('PT', 100)).toEqual(['PT 90.00 90.00'])
+    expect(await t.request('LASER', 100)).toEqual(['LASER OFF'])
+    expect(await t.request('LASER ON', 100)).toEqual(['OK LASER ON'])
+    expect(await t.request('LASER', 100)).toEqual(['LASER ON'])
+    expect(await t.request('LASER OFF', 100)).toEqual(['OK LASER OFF'])
+    expect(await t.request('CORNERS', 100)).toEqual(['CORNERS 00000 0'])
+    expect(await t.request('CAL MAP', 100)).toEqual(['MAP GEO'])
+  })
+
+  it('JOG relativo, GOTO absoluto y límites 15..165', async () => {
+    const t = await mk()
+    expect(await t.request('JOG 1.5 -0.25', 100)).toEqual(['OK JOG 91.50 89.75'])
+    expect(await t.request('JOG -0.05 0.05', 100)).toEqual(['OK JOG 91.45 89.80'])
+    expect(await t.request('PT', 100)).toEqual(['PT 91.45 89.80'])
+    expect(await t.request('GOTO 120 60', 100)).toEqual(['OK JOG 120.00 60.00'])
+    expect(await t.request('JOG 20 0', 100)).toEqual(['OK JOG 140.00 60.00'])
+    expect(await t.request('JOG 20 0', 100)).toEqual(['OK JOG 160.00 60.00'])
+    expect(await t.request('JOG 6 0', 100)).toEqual(['ERR LIMIT'])
+    expect(await t.request('PT', 100)).toEqual(['PT 160.00 60.00'])
+    expect(await t.request('JOG 21 0', 100)).toEqual(['ERR RANGE'])
+    expect(await t.request('GOTO 10 90', 100)).toEqual(['ERR RANGE'])
+  })
+
+  it('JOG con latencia: ocupa al módulo y STOP lo interrumpe', async () => {
+    const t = await mk({ latency: { moveMs: 400 } })
+    const p = t.request('JOG 5 0', 2000)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await t.request('PING', 100)).toEqual(['ERR BUSY'])
+    await vi.advanceTimersByTimeAsync(400)
+    expect(await p).toEqual(['OK JOG 95.00 90.00'])
+    const p2 = t.request('JOG 5 0', 2000)
+    expect(await t.request('STOP', 100)).toEqual(['OK STOP'])
+    expect(await p2).toEqual(['ERR STOP'])
+    expect(t.pan).toBe(95)
+  })
+
+  it('el láser se apaga con STOP, con un disparo y solo a los 120 s', async () => {
+    const t = await mk()
+    await t.request('LASER ON', 100)
+    await t.request('STOP', 100)
+    expect(t.laserOn).toBe(false)
+    await t.request('LASER ON', 100)
+    await vi.advanceTimersByTimeAsync(119_000)
+    expect(t.laserOn).toBe(true)
+    await vi.advanceTimersByTimeAsync(1_500)
+    expect(t.laserOn).toBe(false)
+    await t.request('LASER ON', 100)
+    const p = t.request('(5,5)', 2000)
+    await vi.advanceTimersByTimeAsync(50)
+    await p
+    expect(t.laserOn).toBe(false)
+  })
+
+  it('CAL FIT sin esquinas → ERR NODATA; con puntos repetidos → ERR FIT', async () => {
+    const t = await mk()
+    expect(await t.request('CAL FIT', 100)).toEqual(['ERR NODATA'])
+    for (let n = 1; n <= 4; n++) await t.request(`CORNER ${n}`, 100)
+    expect(await t.request('CORNERS', 100)).toEqual(['CORNERS 11110 0'])
+    expect(await t.request('CAL FIT', 100)).toEqual(['ERR FIT'])
+  })
+
+  it('flujo completo: JOG→CORNER×4→CAL FIT→AIM apunta a la celda; sin calibrar se desvía', async () => {
+    const t = await mk()
+    expect(await t.request('AIM 10 10', 100)).toEqual(['OK AIM 10 10'])
+    const off = t.pointing()
+    expect(Math.hypot(off.x - 10, off.y - 10)).toBeGreaterThan(1)
+
+    for (const [i, c] of corners.entries()) expect((await record(t, i + 1, c))[0]).toMatch(new RegExp(`^OK CORNER ${i + 1} `))
+    expect(await t.request('CORNERS', 100)).toEqual(['CORNERS 11110 0'])
+    expect((await record(t, 5, { x: 11, y: 11 }))[0]).toMatch(/^OK CORNER 5 /)
+    const fit = (await t.request('CAL FIT', 100))[0]!
+    expect(fit).toMatch(/^OK FIT \d\.\d\d$/)
+    expect(Number(fit.split(' ')[2])).toBeLessThan(0.01)
+    expect(await t.request('CAL MAP', 100)).toEqual(['MAP GRID'])
+    expect(await t.request('CORNERS', 100)).toEqual(['CORNERS 11111 1'])
+
+    for (const c of [{ x: 1, y: 1 }, { x: 20, y: 20 }, { x: 7, y: 14 }, { x: 11, y: 11 }, { x: 18, y: 3 }]) {
+      expect(await t.request(`AIM ${c.x} ${c.y}`, 100)).toEqual([`OK AIM ${c.x} ${c.y}`])
+      const p = t.pointing()
+      expect(Math.hypot(p.x - c.x, p.y - c.y)).toBeLessThan(0.05)
+    }
+  })
+
+  it('un CORNER nuevo invalida el mapa; sin punto de control OK FIT trae "-"', async () => {
+    const t = await mk()
+    for (const [i, c] of corners.entries()) await record(t, i + 1, c)
+    expect(await t.request('CAL FIT', 100)).toEqual(['OK FIT -'])
+    expect(await t.request('CAL MAP', 100)).toEqual(['MAP GRID'])
+    await t.request('CORNER 5', 100)
+    expect(await t.request('CAL MAP', 100)).toEqual(['MAP GEO'])
+  })
+
+  it('AIM mueve sin tocar el láser encendido; ERR LIMIT fuera de 15..165', async () => {
+    const t = await mk()
+    await t.request('LASER ON', 100)
+    await t.request('AIM 5 5', 100)
+    expect(t.laserOn).toBe(true)
+    const far = await mk({ mount: { dMm: 5 } })
+    expect(await far.request('AIM 1 1', 100)).toEqual(['ERR LIMIT'])
+  })
+
+  it('CAL SAVE persiste el mapa (sobrevive al reinicio); CAL RESET lo borra; ERR STORE', async () => {
+    const t = await mk()
+    for (const [i, c] of corners.entries()) await record(t, i + 1, c)
+    await t.request('CAL FIT', 100)
+    expect(await t.request('CAL SAVE', 100)).toEqual(['OK SAVE'])
+    t.powerCycle()
+    expect(await t.request('PT', 100)).toEqual(['PT 90.00 90.00'])
+    expect(await t.request('CAL MAP', 100)).toEqual(['MAP GRID'])
+    expect(await t.request('CORNERS', 100)).toEqual(['CORNERS 11110 1'])
+    expect(await t.request('CAL RESET', 100)).toEqual(['OK RESET'])
+    expect(await t.request('CORNERS', 100)).toEqual(['CORNERS 00000 0'])
+    expect(await t.request('CAL MAP', 100)).toEqual(['MAP GEO'])
+    t.failStore = true
+    expect(await t.request('CAL SAVE', 100)).toEqual(['ERR STORE'])
+  })
+
+  it('desarmado (Wi-Fi sin armar): JOG, GOTO, AIM y LASER ON responden ERR DISARMED', async () => {
+    const t = await mk({ mode: 'WIFI' })
+    for (const l of ['JOG 1 1', 'GOTO 90 90', 'AIM 3 3', 'LASER ON']) expect(await t.request(l, 100)).toEqual(['ERR DISARMED'])
+    expect(await t.request('LASER OFF', 100)).toEqual(['OK LASER OFF'])
+    expect(await t.request('PT', 100)).toEqual(['PT 90.00 90.00'])
+  })
+
+  it('un disparo normal deja el gimbal en la celda (modo GRID, apuntado exacto)', async () => {
+    const t = await mk()
+    for (const [i, c] of corners.entries()) await record(t, i + 1, c)
+    await t.request('CAL FIT', 100)
+    const p = t.request('(13,6)', 2000)
+    await vi.advanceTimersByTimeAsync(50)
+    expect(await p).toEqual(['OK (13,6)'])
+    const at = t.pointing()
+    expect(Math.hypot(at.x - 13, at.y - 6)).toBeLessThan(0.05)
+  })
+})
