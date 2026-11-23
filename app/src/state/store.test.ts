@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { shipCells, seededRng } from '../core/fleet'
+import { PLANTILLAS } from '../core/plantillas'
 import { SimTransport, SIM_ID, type SimOptions } from '../transport/sim'
 import { createApp, type App } from './store'
 import { memoryKV } from './storage'
@@ -357,6 +358,7 @@ describe('ciclo de disparo', () => {
 describe('flota (editor)', () => {
   it('tapCell coloca el siguiente barco, selecciona, mueve, rota y quita', () => {
     const { app } = mk()
+    app.clearFleet()
     app.tapCell({ x: 3, y: 3 })
     expect(app.fleet.value).toHaveLength(1)
     expect(app.selected.value).toBe('E1')
@@ -404,7 +406,7 @@ describe('persistencia', () => {
     apps.push(b)
     expect(b.mode.value).toBe('atacante')
     expect(b.cycle.value.phase).toBe('aim')
-    expect(b.fleet.value).toEqual([])
+    expect(b.fleet.value).toEqual(PLANTILLAS[0]!.barcos)   // sin flota guardada arranca con la plantilla 1
     expect(b.game.value.shots).toEqual([])
   })
   it('si el almacenamiento lanza, la app funciona', async () => {
@@ -452,5 +454,62 @@ describe('plantillas de fábrica', () => {
     expect(app.fleet.value.find(b => b.id === 'S1')).toMatchObject({ x: 18, y: 13, orient: 'V' })
     app.loadTemplate(99)   // inexistente: no cambia nada
     expect(app.fleet.value.find(b => b.id === 'S1')).toMatchObject({ x: 18, y: 13 })
+  })
+})
+
+describe('partida con plantillas de fábrica', () => {
+  const FAST = { flight: 15, splash: 15, explosion: 15, sunk: 15, cancel: 15 }
+  async function cyc(kv = memoryKV()) {
+    const tr = new SimTransport({ rng: seededRng(7) })
+    const app = createApp({ makeTransport: async () => tr, storage: kv, feedback: () => {}, heartbeatMs: 3_600_000, reconnectDelaysMs: [5, 5, 5], defaultKind: 'sim', cycleMs: FAST })
+    apps.push(app)
+    await app.init()
+    await app.connect(SIM_ID)
+    return { app, kv }
+  }
+  const until = (app: App, p: string) => vi.waitFor(() => expect(app.cycle.value.phase).toBe(p), { timeout: 1500, interval: 5 })
+
+  it('la primera partida usa la plantilla 1; tocar una casilla del barco lo hunde y dice dónde está', async () => {
+    const { app } = await cyc()
+    expect(app.plantilla.value.n).toBe(1)
+    await app.fireAt({ x: 3, y: 13 }); await until(app, 'verdict')   // S1: (3,12) a (3,15)
+    expect(app.answer(true)).toBe('ok')
+    await until(app, 'sunk')
+    expect(app.lastSunk.value).toMatchObject({ id: 'S1', len: 4 })
+    expect(app.known.value).toHaveLength(1)
+    expect(app.status.value.text).toContain('(3,12) a (3,15)')
+    await until(app, 'aim')                                          // sin pantalla de ubicar
+    expect(app.game.value.shots[0]).toMatchObject({ result: 'sunk' })
+    await app.fireAt({ x: 3, y: 14 })                                // otra casilla del mismo barco: impacto directo
+    await until(app, 'aim')
+  })
+
+  it('«NO le dio» sobre un barco de la plantilla pide confirmar', async () => {
+    const { app } = await cyc()
+    await app.fireAt({ x: 16, y: 15 }); await until(app, 'verdict')   // E1
+    expect(app.answer(false)).toBe('conflict')
+    expect(app.answer(false, true)).toBe('ok')
+  })
+
+  it('cada partida nueva con disparos pasa a la siguiente plantilla (1, 2, 3, 4, 5, 1…); sin disparos no gasta', async () => {
+    const { app } = await cyc()
+    app.newMatch()
+    expect(app.plantilla.value.n).toBe(1)                            // partida vacía: se queda
+    for (const esperada of [2, 3, 4, 5, 1]) {
+      const c = { x: 20, y: 20 }
+      await app.fireAt(c); await until(app, 'verdict'); app.answer(false); await until(app, 'aim')
+      app.newMatch()
+      expect(app.plantilla.value.n).toBe(esperada)
+      expect(app.fleet.value).toEqual(PLANTILLAS[esperada - 1]!.barcos)
+      expect(app.known.value).toEqual([])
+    }
+  })
+
+  it('con las plantillas apagadas vuelve a pedir ubicar el barco', async () => {
+    const { app } = await cyc()
+    app.updateSettings({ plantillas: false })
+    await app.fireAt({ x: 3, y: 13 }); await until(app, 'verdict')
+    app.answer(true)
+    await until(app, 'locate')
   })
 })

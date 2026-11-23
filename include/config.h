@@ -49,7 +49,9 @@ constexpr uint32_t AIM_LASER_MAX_MS = 120000;  // LASER ON se apaga solo a los 1
 
 // ---- Tiempos
 constexpr uint32_t SETTLE_MS   = 300;    // espera tras detener los servos, antes de encender el láser
-constexpr uint32_t LASER_ON_MS = 1500;
+constexpr uint32_t LASER_ON_MS = 1500;   // permanencia mínima del láser en cada disparo
+constexpr uint32_t LASER_HOLD_MS = 60000; // tras un disparo el láser SIGUE ENCENDIDO hasta el siguiente movimiento (disparo, JOG, GOTO, AIM),
+                                          // un STOP, o este tiempo sin actividad: así se ve entre disparos. 0 = apagar al terminar los 1,5 s
 constexpr uint32_t TEST_GAP_MS = 1500;
 constexpr uint32_t LED_HIT_MS  = 2000;
 constexpr uint16_t BEEP_HZ = 1000;

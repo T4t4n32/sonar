@@ -6,7 +6,7 @@ import { batch, computed, effect, signal } from '@preact/signals'
 import { addShot, fromJSON, hasShot, isVictory, newGame, remainingShips, setVerdict, toJSON, type GameState } from '../core/board'
 import { PLANTILLAS } from '../core/plantillas'
 import { ensureInside, fleetCoordinatesList, placeShip, randomFleet, removeShip, rotateShip, shipAt, shipCells, validateFleet } from '../core/fleet'
-import { fleetLeft, isKnownShip, knownShipAt, locateShip, pendingLocate, reconcileSunk, validateLocation, type KnownShip, type LocationCheck } from '../core/known'
+import { applySunk, fleetLeft, isKnownShip, knownShipAt, locateShip, pendingLocate, reconcileSunk, validateLocation, type KnownShip, type LocationCheck } from '../core/known'
 import { fire, friendlyError, isValidCoord, parseReply, type CalValues, type ErrCode, type ModuleMode } from '../core/protocol'
 import { FLEET_SPEC, type Coord, type LinkState, type Orient, type PlacedShip } from '../core/types'
 import { SimTransport } from '../transport/sim'
@@ -21,7 +21,7 @@ export const APP_VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_V
 
 export type Mode = 'atacante' | 'defensor'
 export type Submode = 'profesor' | 'duelo'
-export interface Settings { theme: 'dark' | 'light'; sound: boolean; vibrate: boolean; wake: boolean; assistant: boolean }
+export interface Settings { theme: 'dark' | 'light'; sound: boolean; vibrate: boolean; wake: boolean; assistant: boolean; plantillas: boolean }
 export interface LogEntry { id: number; t: number; dir: 'tx' | 'rx' | 'sys' | 'err'; text: string }
 export interface Status { kind: 'idle' | 'wait' | 'ok' | 'err'; text: string }
 export interface Hello { fw: string; name: string; mode: ModuleMode; caps: string[] }
@@ -53,7 +53,7 @@ export interface AppDeps {
   defaultKind?: TransportKind
 }
 
-export const DEFAULT_SETTINGS: Settings = { theme: 'dark', sound: true, vibrate: true, wake: false, assistant: false }
+export const DEFAULT_SETTINGS: Settings = { theme: 'dark', sound: true, vibrate: true, wake: false, assistant: false, plantillas: true }
 export const CAL_RANGES: { key: keyof CalValues; label: string; min: number; max: number; unit: string }[] = [
   { key: 'x', label: 'Estación x', min: -200, max: 400, unit: 'mm' },
   { key: 'y', label: 'Estación y', min: -300, max: 400, unit: 'mm' },
@@ -83,7 +83,10 @@ export function createApp(deps: AppDeps = {}) {
   // ---------- carga ----------
   const timing: CycleTiming = { ...DEFAULT_TIMING, ...deps.cycleMs }
   const prefs = loadJSON<{ mode?: Mode; kind?: TransportKind; peer?: string | null; lastSent?: Coord | null; sent?: number }>(kv, 'prefs', {})
-  const loadedFleet = loadJSON<unknown[]>(kv, 'fleet', []).filter(isShip)
+  const loadedTpl = loadJSON<{ idx?: number }>(kv, 'plantilla', {})
+  const startTpl = Number.isInteger(loadedTpl.idx) && loadedTpl.idx! >= 0 && loadedTpl.idx! < PLANTILLAS.length ? loadedTpl.idx! : 0
+  const loadedFleet0 = loadJSON<unknown[]>(kv, 'fleet', []).filter(isShip)
+  const loadedFleet = loadedFleet0.length ? loadedFleet0 : PLANTILLAS[startTpl]!.barcos.map(b => ({ ...b }))
   let loadedGame: GameState = newGame(now())
   try { const g = kv.get('game'); if (g) loadedGame = fromJSON(g) } catch { /* partida corrupta: empieza limpia */ }
   const loadedKnown = loadJSON<unknown[]>(kv, 'known', []).filter(isKnownShip)
@@ -121,6 +124,11 @@ export function createApp(deps: AppDeps = {}) {
   const hb = signal<Heartbeat>({ ok: null, rttMs: 0, at: 0, fails: 0 })
   const game = signal<GameState>(loadedGame)
   const fleet = signal<PlacedShip[]>(loadedFleet)
+  /** Plantilla de fábrica en juego (0..4): la partida 1 usa la plantilla 1, la siguiente la 2, y así en rotación. */
+  const tplIdx = signal(startTpl)
+  const plantilla = computed(() => PLANTILLAS[tplIdx.value]!)
+  /** Barco de la plantilla activa que cubre la casilla `c` (solo con las plantillas activadas). */
+  const templateShipAt = (c: Coord): PlacedShip | undefined => (settings.value.plantillas ? shipAt(plantilla.value.barcos, c) : undefined)
   const known = signal<KnownShip[]>(loadedKnown)
   const cycle = signal<Cycle>(restoreCycle())
   /** cancelación sobria del ciclo (error del módulo, STOP, enlace caído) */
@@ -410,7 +418,20 @@ export function createApp(deps: AppDeps = {}) {
       game.value = r.state
       go({ t: 'done', sunk: true })
       startSunk(r.sunk[r.sunk.length - 1]!, cy.at)
-    } else go({ t: 'done' })
+      return
+    }
+    // Plantilla activa: tocar CUALQUIER casilla de un barco lo hunde (regla del profesor); la app ya sabe dónde está, no hay que ubicarlo.
+    const tsh = cy.n !== null ? templateShipAt(cy.at) : undefined
+    if (tsh && cy.n !== null && !knownShipAt(known.value, cy.at) && !known.value.some(k => k.id === tsh.id)) {
+      const ks: KnownShip = { id: tsh.id, kind: tsh.kind, len: tsh.len, orient: tsh.orient, cells: shipCells(tsh) }
+      batch(() => { known.value = [...known.value, ks]; game.value = applySunk(game.value, cy.n!, ks, now()) })
+      const a = ks.cells[0]!, b = ks.cells[ks.cells.length - 1]!
+      setStatus('ok', `${ks.kind === 'submarino' ? 'Submarino' : 'Embarcación'} ${ks.id} hundido: (${a.x},${a.y}) a (${b.x},${b.y}).`)
+      go({ t: 'done', sunk: true })
+      startSunk(ks, cy.at)
+      return
+    }
+    go({ t: 'done' })
   }
   /** Fin del vuelo: justo antes de tocar la casilla el tiempo se congela (veredicto), o explota si el barco ya está ubicado. */
   function onLanded(): void {
@@ -493,7 +514,7 @@ export function createApp(deps: AppDeps = {}) {
   function answer(yes: boolean, confirmed = false): 'ok' | 'conflict' | 'ignored' {
     const cy = cycle.value
     if (cy.phase !== 'verdict' || cy.n === null || !cy.at) return 'ignored'
-    if (!yes && !confirmed && knownShipAt(known.value, cy.at)) { conflict.value = true; return 'conflict' }
+    if (!yes && !confirmed && (knownShipAt(known.value, cy.at) || templateShipAt(cy.at))) { conflict.value = true; return 'conflict' }
     conflict.value = false
     pushUndo()
     game.value = setVerdict(game.value, cy.n, yes ? 'hit' : 'miss', undefined, now())
@@ -667,7 +688,7 @@ export function createApp(deps: AppDeps = {}) {
   const randomizeFleet = (rng?: () => number) => { selected.value = null; setFleet(rng ? randomFleet(rng) : randomFleet()) }
   const clearFleet = () => { selected.value = null; setFleet([]) }
   /** Carga una de las plantillas de fábrica (las mismas 5 hojas impresas, numeradas 1..5). */
-  const loadTemplate = (n: number) => { const t = PLANTILLAS.find(p => p.n === n); if (!t) return; selected.value = null; setFleet(t.barcos.map(b => ({ ...b }))) }
+  const loadTemplate = (n: number) => { const t = PLANTILLAS.find(p => p.n === n); if (!t) return; selected.value = null; tplIdx.value = n - 1; setFleet(t.barcos.map(b => ({ ...b }))) }
   const fleetText = () => fleetCoordinatesList(fleet.value)
 
   // ---------- modos ----------
@@ -678,6 +699,12 @@ export function createApp(deps: AppDeps = {}) {
   // ---------- partida ----------
   function newMatch(): void {
     batch(() => {
+      // Cada partida usa la siguiente plantilla (1, 2, 3, 4, 5, 1…); una partida sin disparos no gasta plantilla.
+      if (settings.value.plantillas) {
+        if (game.value.shots.length > 0) tplIdx.value = (tplIdx.value + 1) % PLANTILLAS.length
+        fleet.value = plantilla.value.barcos.map(b => ({ ...b }))
+        selected.value = null
+      }
       game.value = newGame(now()); known.value = []; lastSent.value = null; sent.value = 0; draft.value = { x: null, y: null }
       victory.value = false; conflict.value = false; lastSunk.value = null; cancelFx.value = null; flash.value = null
       status.value = { kind: 'idle', text: '' }
@@ -695,6 +722,7 @@ export function createApp(deps: AppDeps = {}) {
   const disposers: (() => void)[] = []
   disposers.push(effect(() => saveJSON(kv, 'settings', settings.value)))
   disposers.push(effect(() => saveJSON(kv, 'fleet', fleet.value)))
+  disposers.push(effect(() => saveJSON(kv, 'plantilla', { idx: tplIdx.value })))
   disposers.push(effect(() => { try { kv.set('game', toJSON(game.value)) } catch { /* nada */ } }))
   disposers.push(effect(() => saveJSON(kv, 'known', known.value)))
   disposers.push(effect(() => saveJSON(kv, 'cycle', cycle.value)))
@@ -718,7 +746,7 @@ export function createApp(deps: AppDeps = {}) {
     draft, target, lastSent, sent, busy, status, beam, rings, test, cal, calMsg, log, victory,
     cycle, known, cancelFx, flash, conflict, lastSunk, undoCount,
     // derivadas
-    validation, pendingShot, connected, unplaced, pendingHits, left,
+    plantilla, tplIdx, validation, pendingShot, connected, unplaced, pendingHits, left,
     // acciones
     calib, calibResetMap,
     init, dispose, setKind, refreshPeers, connect, disconnect, ping, fireAt, stop, runTest, calShow, calSet, calSave, calReset,

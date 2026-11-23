@@ -116,6 +116,7 @@ void setup() {
 
   g_clock.setIdleHook(idleHook);
   g_ctrl.setGridStore(&g_gridStore);
+  g_ctrl.setLaserHoldMs(cfg::LASER_HOLD_MS);          // el láser queda encendido tras cada disparo hasta el siguiente movimiento
   g_ctrl.begin();                                     // láser apagado, calibración cargada, servos libres
   {   // Protocolo v2 (solo HELLO por ahora): el modo real del módulo. Sin cambio de modo ni armado: el comportamiento v1 no varía.
     core::Controller::Link link;

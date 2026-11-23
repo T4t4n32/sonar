@@ -48,6 +48,11 @@ class Controller {
   // Mapa de apuntado por esquinas (opcional; llamar ANTES de begin()). Sin almacén, el mapa solo vive en RAM.
   void setGridStore(hal::GridStore* s) { gridStore_ = s; }
 
+  // Tras un disparo el láser se queda encendido hasta el siguiente movimiento, un STOP o `ms` sin actividad (0 = se apaga al
+  // terminar la permanencia, comportamiento clásico). Llamar ANTES de begin(). Seguridad: el láser se apaga SIEMPRE antes de que
+  // se mueva un servo (disparo, JOG, GOTO, AIM); solo LASER ON explícito (calibración) lo deja encendido mientras se mueve.
+  void setLaserHoldMs(uint32_t ms) { laserHoldMs_ = ms; }
+
   void begin();
   void tick();                                                   // llamar desde el bucle principal: apaga el láser de apuntado vencido
   void handleLine(const std::string& line, const Reply& out);   // una línea completa; bloquea mientras dispara
@@ -75,6 +80,10 @@ class Controller {
   GridCal grid_;                                // mapa por esquinas (valid = se usa en vez de la geometría)
   volatile bool aimLaserOn_ = false;            // láser encendido a propósito por LASER ON (calibración)
   uint32_t aimLaserSince_ = 0;
+  uint32_t laserHoldMs_ = 0;                    // 0 = sin retención tras el disparo
+  uint32_t aimLaserLimitMs_ = 0;                // vencimiento del láser encendido (retención o LASER ON)
+  volatile bool holdOn_ = false;                // el láser está encendido por la retención tras un disparo (no por LASER ON)
+  void holdOff();                               // apaga el láser de retención antes de mover servos
 
   bool disarmed() const;                        // armado exigido y vencido
   bool targetFor(Cell c, ServoCmd& out) const;  // ángulos de servo de una celda (mapa por esquinas si lo hay; si no, geometría)

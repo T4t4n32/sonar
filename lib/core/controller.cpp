@@ -111,6 +111,7 @@ void Controller::begin() {
     if (gridStore_->load(g)) grid_ = g;
   }
   aimLaserOn_ = false;
+  holdOn_ = false;
 
   pan_.detach();       // servos libres hasta el primer disparo
   tilt_.detach();
@@ -124,13 +125,15 @@ void Controller::begin() {
 void Controller::requestStop() {
   stop_ = true;
   aimLaserOn_ = false;
+  holdOn_ = false;
   laser_.set(false);   // apagado inmediato (un GPIO); el disparo en curso lo notará y responderá ERR STOP
 }
 
 void Controller::tick() {
-  if (aimLaserOn_ && !busy_ && static_cast<uint32_t>(clock_.ms() - aimLaserSince_) >= cfg::AIM_LASER_MAX_MS) {
-    laser_.set(false);   // LASER ON se olvida encendido: se apaga solo
+  if (aimLaserOn_ && !busy_ && static_cast<uint32_t>(clock_.ms() - aimLaserSince_) >= aimLaserLimitMs_) {
+    laser_.set(false);   // LASER ON (o la retención tras un disparo) se olvida encendido: se apaga solo
     aimLaserOn_ = false;
+    holdOn_ = false;
   }
 }
 
@@ -155,6 +158,13 @@ bool Controller::targetFor(Cell c, ServoCmd& out) const {
   if (!aim.ok) return false;
   out = toServo(aim, cal_);
   return true;
+}
+
+void Controller::holdOff() {
+  if (!holdOn_) return;
+  laser_.set(false);
+  aimLaserOn_ = false;
+  holdOn_ = false;
 }
 
 bool Controller::busy() const { return busy_; }
@@ -190,7 +200,8 @@ bool Controller::fire(Cell c, std::string& errLine) {
     return false;
   };
 
-  aimLaserOn_ = false;             // un disparo manda sobre el láser de apuntado
+  aimLaserOn_ = false;             // un disparo manda sobre el láser de apuntado y sobre la retención del anterior
+  holdOn_ = false;
   laser_.set(false);
   if (stop_) return stopped();
 
@@ -209,8 +220,16 @@ bool Controller::fire(Cell c, std::string& errLine) {
   if (stop_) return stopped();
 
   clock_.delayMs(cfg::LASER_ON_MS);
-  laser_.set(false);
+  if (laserHoldMs_ > 0 && !stop_) {
+    aimLaserOn_ = true;              // el láser sigue encendido: se ve entre disparos; lo apaga el siguiente movimiento,
+    holdOn_ = true;                  // un STOP o el vencimiento de la retención (tick)
+    aimLaserSince_ = clock_.ms();
+    aimLaserLimitMs_ = laserHoldMs_;
+  } else {
+    laser_.set(false);
+  }
   if (stop_) {
+    laser_.set(false);
     errLine = "ERR STOP";
     return false;
   }
@@ -354,6 +373,7 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
         say("ERR LIMIT");
         break;
       }
+      holdOff();
       attachServos();
       moveTo(p, t);
       if (stop_) {
@@ -371,13 +391,16 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
       }
       laser_.set(true);
       aimLaserOn_ = true;
+      holdOn_ = false;
       aimLaserSince_ = clock_.ms();
+      aimLaserLimitMs_ = cfg::AIM_LASER_MAX_MS;
       say("OK LASER ON");
       break;
 
     case CmdType::LaserOff:
       laser_.set(false);
       aimLaserOn_ = false;
+      holdOn_ = false;
       say("OK LASER OFF");
       break;
 
@@ -442,6 +465,7 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
         say("ERR LIMIT");
         break;
       }
+      holdOff();
       attachServos();
       moveTo(target.panServoDeg, target.tiltServoDeg);
       say(stop_ ? "ERR STOP" : "OK AIM " + std::to_string(pr.cmd.x) + " " + std::to_string(pr.cmd.y));

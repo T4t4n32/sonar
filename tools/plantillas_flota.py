@@ -131,6 +131,77 @@ def pdf(path):
     c.save()
 
 
+def pdf_bolsillo(path):
+    """Las 5 plantillas en UNA hoja carta (tarjetas de 8 cm, casillas de 3,5 mm): para recortar y llevar en el bolsillo."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+
+    W, H = letter
+    cell = 3.5 * mm
+    G = 20 * cell
+    c = canvas.Canvas(path, pagesize=(W, H))
+    c.setTitle("SONAR - plantillas de bolsillo")
+    bw, bh = 86 * mm, 88 * mm
+    mx, my = (W - 2 * bw) / 2, (H - 3 * bh) / 2
+
+    def tarjeta(k, ox, oy):  # (ox, oy) = esquina inferior izquierda del bloque
+        gx, gy = ox + 9 * mm, oy + 8 * mm
+        fleet = PLANTILLAS[k - 1]
+        for (i, n, x, y, o) in fleet:
+            w, h = (n * cell, cell) if o == "H" else (cell, n * cell)
+            c.setFillGray(0.85 if i[0] == "S" else 0.92)
+            c.rect(gx + (x - 1) * cell, gy + (y - 1) * cell, w, h, stroke=0, fill=1)
+        for i in range(21):
+            major = i % 5 == 0
+            c.setStrokeGray(0.0 if major else 0.6)
+            c.setLineWidth(0.5 if major else 0.2)
+            c.line(gx + i * cell, gy, gx + i * cell, gy + G)
+            c.line(gx, gy + i * cell, gx + G, gy + i * cell)
+        for (i, n, x, y, o) in fleet:
+            w, h = (n * cell, cell) if o == "H" else (cell, n * cell)
+            c.setStrokeGray(0.0)
+            c.setLineWidth(1.1)
+            c.rect(gx + (x - 1) * cell, gy + (y - 1) * cell, w, h, stroke=1, fill=0)
+            c.setFillGray(0.2)
+            c.setFont("Helvetica-Bold", 3.2)
+            c.drawCentredString(gx + (x - 0.5) * cell, gy + (y - 0.5) * cell - 1.1, i)
+        c.setFillGray(0)
+        c.setFont("Helvetica", 4.2)
+        for v in (1, 5, 10, 15, 20):
+            c.drawCentredString(gx + (v - 0.5) * cell, gy - 3 * mm, str(v))
+            c.drawRightString(gx - 1.2 * mm, gy + (v - 0.5) * cell - 1.4, str(v))
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(gx, gy + G + 3 * mm, f"PLANTILLA {k}")
+        c.setFont("Helvetica", 5)
+        det = "  ".join(f"{i}({x},{y}){o}" for (i, n, x, y, o) in fleet)
+        c.drawString(gx, gy - 6 * mm, det)
+
+    pos = [(0, 2), (1, 2), (0, 1), (1, 1), (0, 0)]
+    for k, (col, row) in enumerate(pos, 1):
+        tarjeta(k, mx + col * bw, my + row * bh)
+    # sexto hueco: instrucciones
+    ox, oy = mx + 1 * bw, my + 0 * bh
+    c.setFillGray(0)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(ox + 9 * mm, oy + 70 * mm, "PLANTILLAS DE BOLSILLO")
+    c.setFont("Helvetica", 7)
+    for j, t in enumerate(["Recorta cada tarjeta y pinta SOLO los barcos", "(azul o verde; el negro no deja ver el laser).",
+                           "", "S = submarino de 4 casillas, E = embarcacion de 2.",
+                           "(x,y): x a la derecha, y hacia arriba; (1,1) abajo-izq.", "",
+                           "La app usa la misma numeracion: la partida 1", "es la plantilla 1, la siguiente la 2, y asi.",
+                           "", "Imprimir al 100 % (sin ajustar a la pagina)."]):
+        c.drawString(ox + 9 * mm, oy + (62 - 4.6 * j) * mm, t)
+    c.setStrokeGray(0.7)
+    c.setDash(2, 2)
+    c.setLineWidth(0.4)
+    for r in range(4):
+        c.line(mx, my + r * bh, mx + 2 * bw, my + r * bh)
+    for q in range(3):
+        c.line(mx + q * bw, my, mx + q * bw, my + 3 * bh)
+    c.save()
+
+
 if __name__ == "__main__":
     validar()
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -139,4 +210,5 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(root, "docs", "impresos"), exist_ok=True)
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "docs", "impresos", "plantillas-flota-1-a-5.pdf")
     pdf(out)
+    pdf_bolsillo(os.path.join(root, "docs", "impresos", "plantillas-flota-bolsillo.pdf"))
     print("OK", out)

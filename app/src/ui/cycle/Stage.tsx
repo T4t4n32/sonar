@@ -66,7 +66,7 @@ export function VerdictSheet() {
         </div>
         {conflict ? (
           <div class="vconf" role="alertdialog" aria-label="Conflicto">
-            <p><b>Esa casilla es de un barco que ya ubicaste.</b> ¿Seguro que NO le dio?</p>
+            <p><b>La {app.settings.value.plantillas ? app.plantilla.value.nombre : 'flota'} marca un barco en esa casilla.</b> ¿Seguro que NO le dio?</p>
             <div class="vbtns two">
               <button type="button" id="vConfirmMiss" class="vb no" onClick={() => app.answer(false, true)}><IconMiss />SÍ, FUE AGUA</button>
               <button type="button" id="vKeep" class="vb ghostb" onClick={() => app.dismissConflict()}>VOLVER</button>
@@ -108,6 +108,7 @@ export function SunkOverlay() {
         </div>
         <h2>¡HUNDIDO!</h2>
         <p class="sunk-name">{ship ? `${ship.kind === 'submarino' ? 'Submarino' : 'Embarcación'} ${ship.id.slice(1)}` : 'Barco'}</p>
+        {ship && <p class="sunk-name" id="sunkPos">{`en (${ship.cells[0]!.x},${ship.cells[0]!.y}) a (${ship.cells[ship.cells.length - 1]!.x},${ship.cells[ship.cells.length - 1]!.y})`}</p>}
         <p class="sunk-left">Quedan <b>{left.embarcaciones}</b> embarcaciones · <b>{left.submarinos}</b> submarinos</p>
       </div>
     </div>

@@ -1977,6 +1977,46 @@ static void test_info_command(void) {
   EXPECT_REPLIES(r2.send("INFO"), std::string("INFO - pan=90.00 tilt=90.00 map=GEO fw=") + FW_VERSION);
 }
 
+
+static void test_laser_hold_after_shot(void) {
+  Rig r;
+  r.ctrl.setLaserHoldMs(5000);
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("(11,11)"), "OK (11,11)");
+  TEST_ASSERT_TRUE_MESSAGE(r.log.laserOn, "tras el disparo el laser sigue encendido");
+  EXPECT_REPLIES(r.send("LASER"), "LASER ON");
+  r.log.nowMs += 4000;
+  r.ctrl.tick();
+  TEST_ASSERT_TRUE(r.log.laserOn);                       // aún no vence
+  r.log.nowMs += 1500;
+  r.ctrl.tick();
+  TEST_ASSERT_FALSE_MESSAGE(r.log.laserOn, "vence la retencion");
+  // El siguiente disparo apaga el laser ANTES de mover los servos y lo vuelve a dejar encendido.
+  r.send("(11,11)");
+  TEST_ASSERT_TRUE(r.log.laserOn);
+  const size_t m = mark(r);
+  EXPECT_REPLIES(r.send("(3,3)"), "OK (3,3)");
+  TEST_ASSERT_FALSE(r.log.events[m].kind == Ev::ServoWrite);
+  TEST_ASSERT_TRUE(r.log.events[m].kind == Ev::LaserSet && !r.log.events[m].on);
+  for (size_t i = m; i < r.log.events.size(); ++i) {
+    if (r.log.events[i].kind == Ev::ServoWrite) TEST_ASSERT_FALSE_MESSAGE(r.log.events[i].laserOn, "servo movido con laser encendido");
+  }
+  TEST_ASSERT_TRUE(r.log.laserOn);
+  // JOG / AIM / STOP también lo apagan.
+  r.send("JOG 1 0");
+  TEST_ASSERT_FALSE(r.log.laserOn);
+  r.send("(5,5)");
+  TEST_ASSERT_TRUE(r.log.laserOn);
+  EXPECT_REPLIES(r.send("STOP"), "OK STOP");
+  TEST_ASSERT_FALSE(r.log.laserOn);
+  EXPECT_REPLIES(r.send("LASER"), "LASER OFF");
+  // Con retención 0 (por defecto) el comportamiento clásico no cambia: se apaga a los 1,5 s.
+  Rig r0;
+  r0.ctrl.begin();
+  r0.send("(5,5)");
+  TEST_ASSERT_FALSE(r0.log.laserOn);
+}
+
 int main() {
   UNITY_BEGIN();
 
@@ -2060,6 +2100,7 @@ int main() {
   RUN_TEST(test_line_assembler_classic_and_tolerant);
   RUN_TEST(test_line_assembler_idle_flush);
   RUN_TEST(test_info_command);
+  RUN_TEST(test_laser_hold_after_shot);
 
   return UNITY_END();
 }

@@ -74,7 +74,7 @@ export function Batalla() {
       <FleetMarker />
       <section class="card" id="radarCard" aria-label="Radar">
         <div class="cardhead"><h2>Radar · tablero 20×20</h2>
-          <span class="sub" id="aimLabel">{t ? `(${t.x}, ${t.y})` : 'sin elegir'}</span>
+          <span class="sub" id="aimLabel">{app.settings.value.plantillas ? `Plantilla ${app.plantilla.value.n} · ` : ''}{t ? `(${t.x}, ${t.y})` : 'sin elegir'}</span>
         </div>
         <Radar />
         <CancelNotice />
