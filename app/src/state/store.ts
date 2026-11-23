@@ -4,6 +4,7 @@
  */
 import { batch, computed, effect, signal } from '@preact/signals'
 import { addShot, fromJSON, hasShot, isVictory, newGame, remainingShips, setVerdict, toJSON, type GameState } from '../core/board'
+import { PLANTILLAS } from '../core/plantillas'
 import { ensureInside, fleetCoordinatesList, placeShip, randomFleet, removeShip, rotateShip, shipAt, shipCells, validateFleet } from '../core/fleet'
 import { fleetLeft, isKnownShip, knownShipAt, locateShip, pendingLocate, reconcileSunk, validateLocation, type KnownShip, type LocationCheck } from '../core/known'
 import { fire, friendlyError, isValidCoord, parseReply, type CalValues, type ErrCode, type ModuleMode } from '../core/protocol'
@@ -665,6 +666,8 @@ export function createApp(deps: AppDeps = {}) {
   function removeSelected(): void { if (selected.value) setFleet(removeShip(fleet.value, selected.value)) }
   const randomizeFleet = (rng?: () => number) => { selected.value = null; setFleet(rng ? randomFleet(rng) : randomFleet()) }
   const clearFleet = () => { selected.value = null; setFleet([]) }
+  /** Carga una de las plantillas de fábrica (las mismas 5 hojas impresas, numeradas 1..5). */
+  const loadTemplate = (n: number) => { const t = PLANTILLAS.find(p => p.n === n); if (!t) return; selected.value = null; setFleet(t.barcos.map(b => ({ ...b }))) }
   const fleetText = () => fleetCoordinatesList(fleet.value)
 
   // ---------- modos ----------
@@ -720,7 +723,7 @@ export function createApp(deps: AppDeps = {}) {
     calib, calibResetMap,
     init, dispose, setKind, refreshPeers, connect, disconnect, ping, fireAt, stop, runTest, calShow, calSet, calSave, calReset,
     setTarget, setAxis, nudgeAxis, answer, dismissConflict, checkLocation, locate, skipLocate, relocate, undo,
-    tapCell, moveShipTo, rotateSelected, removeSelected, randomizeFleet, clearFleet, setFleet, fleetText,
+    tapCell, moveShipTo, rotateSelected, removeSelected, randomizeFleet, clearFleet, loadTemplate, setFleet, fleetText,
     setMode, setSubmode, updateSettings, newMatch, exportJSON, clearLog, logText,
     // utilidades
     remaining: () => remainingShips(game.value),

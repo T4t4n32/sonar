@@ -432,3 +432,25 @@ describe('persistencia', () => {
     expect(typeof o.version).toBe('string')
   })
 })
+
+describe('plantillas de fábrica', () => {
+  it('son 5, numeradas, válidas y sin barcos pegados', async () => {
+    const { PLANTILLAS } = await import('../core/plantillas')
+    const { validateFleet } = await import('../core/fleet')
+    expect(PLANTILLAS.map(t => t.n)).toEqual([1, 2, 3, 4, 5])
+    for (const t of PLANTILLAS) {
+      expect(validateFleet(t.barcos, { allowTouching: false }).ok, t.nombre).toBe(true)
+      expect(t.barcos).toHaveLength(5)
+    }
+    expect(new Set(PLANTILLAS.map(t => JSON.stringify(t.barcos))).size).toBe(5)   // todas distintas
+  })
+  it('loadTemplate coloca la plantilla n y la flota queda válida', () => {
+    const app = createApp({ storage: memoryKV(), feedback: () => {}, defaultKind: 'sim' })
+    app.loadTemplate(3)
+    expect(app.fleet.value).toHaveLength(5)
+    expect(app.validation.value.ok).toBe(true)
+    expect(app.fleet.value.find(b => b.id === 'S1')).toMatchObject({ x: 18, y: 13, orient: 'V' })
+    app.loadTemplate(99)   // inexistente: no cambia nada
+    expect(app.fleet.value.find(b => b.id === 'S1')).toMatchObject({ x: 18, y: 13 })
+  })
+})

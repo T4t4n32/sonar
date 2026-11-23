@@ -1,4 +1,5 @@
 import { effect, signal } from '@preact/signals'
+import { PLANTILLAS } from '../../core/plantillas'
 import { FLEET_SPEC } from '../../core/types'
 import { app } from '../../state'
 import { FleetBoard } from '../Board'
@@ -43,6 +44,9 @@ function Fleet() {
             <button type="button" class="btn sm warn" id="bRemove" disabled={!sel} onClick={() => app.removeSelected()}>Quitar</button>
             <button type="button" class="btn sm" id="bRandom" onClick={() => app.randomizeFleet()}>Aleatoria</button>
             <button type="button" class="btn sm" id="bClear" onClick={() => app.clearFleet()}>Vaciar</button>
+          </div>
+          <div class="shiplist" role="group" aria-label="Plantillas de fábrica (las hojas impresas)">
+            {PLANTILLAS.map(t => <button type="button" id={`bTpl${t.n}`} onClick={() => { app.loadTemplate(t.n); say(`${t.nombre} cargada.`) }}>Plantilla {t.n}</button>)}
           </div>
           <button type="button" class="btn pri" id="bDone" onClick={() => { editing.value = false; app.selected.value = null }}>Listo, ocultar flota</button>
         </div>
