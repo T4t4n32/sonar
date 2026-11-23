@@ -697,11 +697,16 @@ export function createApp(deps: AppDeps = {}) {
   function updateSettings(p: Partial<Settings>): void { settings.value = { ...settings.value, ...p } }
 
   // ---------- partida ----------
-  function newMatch(): void {
+  /** Partida nueva. Sin argumento sigue la rotación (la siguiente plantilla); con `tpl` (1..5) arranca justo con esa plantilla. */
+  function newMatch(tpl?: number): void {
     batch(() => {
+      if (tpl !== undefined && tpl >= 1 && tpl <= PLANTILLAS.length) {
+        tplIdx.value = tpl - 1
+        settings.value = { ...settings.value, plantillas: true }
+      }
       // Cada partida usa la siguiente plantilla (1, 2, 3, 4, 5, 1…); una partida sin disparos no gasta plantilla.
       if (settings.value.plantillas) {
-        if (game.value.shots.length > 0) tplIdx.value = (tplIdx.value + 1) % PLANTILLAS.length
+        if (tpl === undefined && game.value.shots.length > 0) tplIdx.value = (tplIdx.value + 1) % PLANTILLAS.length
         fleet.value = plantilla.value.barcos.map(b => ({ ...b }))
         selected.value = null
       }

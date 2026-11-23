@@ -1,3 +1,4 @@
+import { PLANTILLAS } from '../../core/plantillas'
 import { signal } from '@preact/signals'
 import { exportCsv, stats } from '../../core/board'
 import { app, APP_VERSION } from '../../state'
@@ -8,6 +9,7 @@ import { copyText, download, say, shareText } from '../nav'
 import { Toggle } from '../parts'
 
 const confirmNew = signal(false)
+const confirmTpl = signal(0)   // plantilla pendiente de confirmar (0 = ninguna)
 let prevKind: 'bluetooth' | 'wifi' = 'bluetooth'
 const hhmmss = (t: number) => new Date(t).toLocaleTimeString('es-CO', { hour12: false })
 const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
@@ -57,6 +59,20 @@ export function Partida() {
         {wakeSupported() && <div class="sw-row"><span>Mantener pantalla encendida<small>Durante la evaluación</small></span><Toggle label="Pantalla encendida" checked={s.wake} onChange={v => app.updateSettings({ wake: v })} /></div>}
         <div class="sw-row"><span>Plantillas de fábrica<small>Partida 1 = plantilla 1, luego la 2… Al tocar un barco se hunde y la app dice dónde está</small></span><Toggle label="Plantillas de fábrica" checked={s.plantillas} onChange={v => app.updateSettings({ plantillas: v })} /></div>
         <div class="sw-row"><span>Modo simulado<small>Rival virtual, sin hardware</small></span><Toggle label="Modo simulado" checked={sim} onChange={v => { void app.setKind(v ? 'sim' : prevKind) }} /></div>
+      </section>
+
+      <section class="card" aria-label="Plantilla">
+        <div class="cardhead"><h2>Plantilla en juego</h2><span class="sub" id="tplActual">{s.plantillas ? `Plantilla ${app.plantilla.value.n}` : 'apagadas'}</span></div>
+        <div class="seg" role="group" aria-label="Elegir plantilla" style={{ marginBottom: '8px' }}>
+          {PLANTILLAS.map(t => (
+            <button type="button" id={`bPlan${t.n}`} aria-pressed={s.plantillas && app.plantilla.value.n === t.n} class={confirmTpl.value === t.n ? 'hit' : ''} onClick={() => {
+              if (s.plantillas && app.plantilla.value.n === t.n && app.game.value.shots.length === 0) { say(`Ya estás en la ${t.nombre}.`); return }
+              if (app.game.value.shots.length > 0 && confirmTpl.value !== t.n) { confirmTpl.value = t.n; setTimeout(() => { if (confirmTpl.value === t.n) confirmTpl.value = 0 }, 3500); return }
+              confirmTpl.value = 0; app.newMatch(t.n); say(`${t.nombre}: partida nueva.`)
+            }}>{confirmTpl.value === t.n ? '¿Seguro?' : t.n}</button>
+          ))}
+        </div>
+        <p class="sub">{confirmTpl.value ? 'Toca otra vez para borrar la partida actual y empezar con esa plantilla.' : 'Elige una para empezar la partida con ella (si ya hay disparos pide confirmar).'}</p>
       </section>
 
       <section class="card" aria-label="Partida">

@@ -505,6 +505,21 @@ describe('partida con plantillas de fábrica', () => {
     }
   })
 
+  it('newMatch(n) arranca con la plantilla elegida (y reactiva las plantillas)', async () => {
+    const { app } = await cyc()
+    await app.fireAt({ x: 20, y: 20 }); await until(app, 'verdict'); app.answer(false); await until(app, 'aim')
+    app.newMatch(4)
+    expect(app.plantilla.value.n).toBe(4)
+    expect(app.fleet.value).toEqual(PLANTILLAS[3]!.barcos)
+    expect(app.game.value.shots).toEqual([])
+    app.updateSettings({ plantillas: false })
+    app.newMatch(2)
+    expect(app.settings.value.plantillas).toBe(true)
+    expect(app.plantilla.value.n).toBe(2)
+    app.newMatch(9)                                   // fuera de rango: sigue la rotación normal (sin disparos no avanza)
+    expect(app.plantilla.value.n).toBe(2)
+  })
+
   it('con las plantillas apagadas vuelve a pedir ubicar el barco', async () => {
     const { app } = await cyc()
     app.updateSettings({ plantillas: false })
