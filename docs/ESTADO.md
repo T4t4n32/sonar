@@ -1,4 +1,4 @@
-# ESTADO de SONAR · Batalla Naval — fuente de verdad (2026-11-15)
+# ESTADO de SONAR · Batalla Naval — fuente de verdad (2026-11-22)
 
 Si dos documentos se contradicen, **manda este**. Lo demás es detalle o historia: ver el [índice](README.md). Mantener al día después de cada decisión.
 
@@ -21,12 +21,14 @@ Consecuencias: **no hacen falta sensores por casilla** (ni matriz LDR ni fotodet
 | Detección | **Ya no hay sensores**: barcos físicos + **testigo** confirma (profesor, 15-nov). La app pre-marca y el testigo da fe. Adjudicación automática por el módulo = extra opcional (protocolo v3 `FLEET`) | 15-nov | [APP_SONAR](03-firmware-y-app/APP_SONAR.md) |
 | App | **APK nativa propia** (Vite + Preact + TS + Capacitor): Batalla, Mi flota, Enlace/TEST, Partida; rival simulado; asistente de tiro | 15-nov | [APP_SONAR](03-firmware-y-app/APP_SONAR.md) |
 | Torreta | Abatible en el maletín: **B (con la tapa) o C (a mano)**; A (servo de levante) solo si sobra tiempo | 8-nov | [TORRETA_ABATIBLE](01-diseno/TORRETA_ABATIBLE.md) |
-| Potencia | **Adaptador 12 V 5 A** + buck 6 V (servos) y 5 V (ESP32/láser); batería 3S opcional | 8-nov | [POTENCIA](02-electronica/POTENCIA.md) |
-| Servos | **MG996R ×2 por módulo** (pan y tilt) + repuestos | 7-nov | [LISTA_MERCADOLIBRE](04-compras/LISTA_MERCADOLIBRE.md) |
+| Potencia | **6 V para los servos** (4 pilas AA / fuente), **ESP32 por USB** (power bank o PC) y láser a su pin 5 V/VIN, GND común. Antes: 12 V 5 A + bucks | 22-nov | [POTENCIA](02-electronica/POTENCIA.md) |
+| Servos | **Tower Pro SG5010 ×2** (pan y tilt) a 6 V (pilas AA o fuente), con 1000 µF. Antes: MG996R | 21-nov | [LISTA_MERCADOLIBRE](04-compras/LISTA_MERCADOLIBRE.md) |
 | Compras | Mercado Libre / tiendas colombianas, **nada de China** (llega tarde) | 7-nov | idem |
 | Publicación | Repositorio **privado** hasta el 24-nov; publicación programada ese día a las 20:00 (`tools/publicar.py`) | 7-nov | [LICENCIAS](05-publicacion/LICENCIAS.md) |
 | Hardware final | **ESP32 + 2 servos + láser + fase de potencia. Nada de luces** (sin matriz LED ni LED de acierto). Sonido y vibración en la app | 20-nov | [PINOUT](02-electronica/PINOUT.md) |
 | Apuntado | **Calibración por esquinas** (protocolo v3): se apunta el láser a las 4 esquinas reales de la matriz (cruceta en la app) y el módulo ajusta una homografía; sirve para pared vertical u horizontal sin medir distancias. Guía: [CALIBRACION](03-firmware-y-app/CALIBRACION.md). 63/63 pruebas nativas | 21-nov | [PROTOCOLO](03-firmware-y-app/PROTOCOLO.md) |
+| Firmware 0.2.0 | Movimiento sincronizado y suave de los dos ejes, remate lento subiendo, calibración de hasta 9 puntos por mínimos cuadrados, `INFO` (causa del último reinicio), `(x,y)` sin salto de línea. 71/71 pruebas nativas; sin probar aún en el ESP32 real | 22-nov | [PROTOCOLO](03-firmware-y-app/PROTOCOLO.md) · [CALIBRACION](03-firmware-y-app/CALIBRACION.md) |
+| Revisión final | Rúbrica + 7 aclaraciones + franjas del lunes 23 (correo **hasta el domingo 22-nov, 8 pm**; +0,5 solo si cumple las especificaciones; máx. 8 grupos) | 22-nov | [REVISION_FINAL](00-proyecto/REVISION_FINAL_2026-11-22.md) |
 | Maqueta | Cajón de cartón (servos + electrónica) y pared vertical para la matriz; sin diseño 3D por tiempo. Presentar el lunes 23-nov da +0,5 | 21-nov | — |
 | Alimentación | Power bank por cable USB-A→C cortado con interruptor en el +5 V; servos a 5 V desde el mismo cable (no por el pin del ESP32), condensador 1000 µF | 21-nov | [PINOUT](02-electronica/PINOUT.md) |
 | App: orientación del radar | La estación y el disparo salen **desde abajo** y (1,1) queda abajo-izquierda, como en el tablero físico (el usuario ve lo mismo que la estación) | 20-nov | [APP_SONAR](03-firmware-y-app/APP_SONAR.md) |

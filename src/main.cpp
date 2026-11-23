@@ -9,6 +9,7 @@
 // ArduinoClock::delayMs, que llama a idleHook() cada ~2 ms. El gancho lee los canales de línea (BT/USB):
 // un STOP apaga el láser y llama a requestStop(); cualquier otra línea se responde ERR BUSY.
 #include <Arduino.h>
+#include <esp_system.h>
 #include <string>
 #include "config.h"
 #include "controller.h"
@@ -119,7 +120,14 @@ void setup() {
   {   // Protocolo v2 (solo HELLO por ahora): el modo real del módulo. Sin cambio de modo ni armado: el comportamiento v1 no varía.
     core::Controller::Link link;
     link.mode = g_maintMode ? "WIFI" : "BT";
-    link.caps = "grid";                               // protocolo v3: calibración por esquinas (JOG, CORNER, CAL FIT, AIM…)
+    link.caps = "grid,pts9,smooth,info";              // v3: calibración por esquinas (JOG, CORNER, CAL FIT, AIM…), 9 puntos, movimiento suave, INFO
+    link.info = []() {                                // diagnóstico: causa del último reinicio (BROWNOUT = la fuente se hundió), tiempo y memoria
+      const esp_reset_reason_t rr = esp_reset_reason();
+      const char* why = rr == ESP_RST_POWERON ? "POWERON" : rr == ESP_RST_SW ? "SW" : rr == ESP_RST_PANIC ? "PANIC"
+                      : rr == ESP_RST_BROWNOUT ? "BROWNOUT" : (rr == ESP_RST_WDT || rr == ESP_RST_INT_WDT || rr == ESP_RST_TASK_WDT) ? "WDT"
+                      : rr == ESP_RST_EXT ? "EXT" : "OTHER";
+      return std::string("up=") + std::to_string(millis() / 1000) + " rst=" + why + " heap=" + std::to_string(ESP.getFreeHeap());
+    };
     g_ctrl.setLink(link);
   }
 

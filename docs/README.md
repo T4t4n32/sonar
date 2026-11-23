@@ -8,6 +8,7 @@ Estados: **VIGENTE** · **PARCIAL** (útil, con partes superadas) · **HISTÓRIC
 |---|---|---|
 | [RUBRICA_Y_CUMPLIMIENTO](00-proyecto/RUBRICA_Y_CUMPLIMIENTO.md) | la rúbrica requisito por requisito y sus huecos | PARCIAL |
 | [PENDIENTES](00-proyecto/PENDIENTES.md) | lista viva de tareas | VIGENTE |
+| [REVISION_FINAL_2026-11-22](00-proyecto/REVISION_FINAL_2026-11-22.md) | **revisión final: rúbrica, 7 aclaraciones, franjas del lunes, checklist y borrador del correo** | VIGENTE |
 | [PREGUNTAS_ALMARIO](00-proyecto/PREGUNTAS_ALMARIO.md) | la petición de casillas de 2 cm y el texto del correo | VIGENTE |
 | [NOMBRE_DEL_PROYECTO](00-proyecto/NOMBRE_DEL_PROYECTO.md) | candidatos de nombre | VIGENTE |
 | [GUIA_DE_PROCESO](00-proyecto/GUIA_DE_PROCESO.md) | reparto de trabajo y flujo (antes `GUIDA_DESVIO`) | PARCIAL |

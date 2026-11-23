@@ -9,7 +9,7 @@
 #define WIFI_SSID_MAINT "DUELO-A-MANT"
 #endif
 #define WIFI_PASS_MAINT "duelo1234"
-#define FW_VERSION "0.1.0"
+#define FW_VERSION "0.2.0"
 
 namespace cfg {
 
@@ -32,9 +32,14 @@ constexpr float PAN_CENTER_SERVO_DEG  = 90.0f;   // ángulo de servo con el rayo
 constexpr float TILT_HORIZ_SERVO_DEG  = 90.0f;   // ángulo de servo con el rayo horizontal
 constexpr float PAN_SIGN  = 1.0f;        // +1: aumentar el ángulo de servo gira a la derecha
 constexpr float TILT_SIGN = 1.0f;        // +1: aumentar el ángulo de servo baja el rayo
-constexpr float MAX_STEP_DEG = 2.0f;     // rampa: máximo avance por paso
+// Movimiento: los dos ejes avanzan A LA VEZ con un perfil suave (arranque y frenado graduales, sin tirones), un paso cada
+// STEP_MS (= un periodo de PWM de 50 Hz: refrescar más a menudo no sirve de nada). MAX_STEP_DEG es el avance MÁXIMO por paso
+// en el punto de mayor velocidad del perfil: 2,5° / 20 ms = 125 °/s de pico (el SG5010 sin carga da ~300 °/s).
+constexpr float MAX_STEP_DEG = 2.5f;
 constexpr uint32_t STEP_MS   = 20;
-constexpr float OVERSHOOT_DEG = 2.0f;    // aproximarse siempre desde el mismo lado
+constexpr float OVERSHOOT_DEG = 2.0f;    // aproximarse siempre desde el mismo lado (compensa la holgura de los engranes)
+constexpr float CREEP_STEP_DEG = 0.4f;   // el último tramo (los OVERSHOOT_DEG finales) va lento: 20 °/s de pico; frena sin rebote
+constexpr float MOVE_EPS_DEG   = 0.01f;  // por debajo de esto el servo ya está en el sitio (no se reordena ni se hace waypoint)
 
 // ---- Calibración por esquinas (JOG / GOTO / LASER ON)
 constexpr float JOG_MAX_DEG      = 20.0f;      // paso relativo máximo por orden JOG

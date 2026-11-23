@@ -30,6 +30,21 @@ CAL SAVE         (OK SAVE)
 ```
 `CAL MAP` responde `MAP GRID` cuando el disparo usa el mapa; `CAL RESET` lo borra y vuelve a la geometría de `config.h`.
 
+## Más precisión (opcional, firmware 0.2.0): los 4 medios de borde
+Con las 4 esquinas el ajuste es exacto, así que un error de apuntado en una esquina se propaga a todo el tablero. Si apuntas además a los **medios de borde** (puntos 6 a 9) el módulo ajusta por **mínimos cuadrados** con los 8 puntos y reparte ese error (la prueba nativa `test_grid_lsq_with_edge_midpoints` simula ±0,3° de error a mano en 25 casos y exige que el peor caso sobre las 400 celdas mejore frente a usar solo 4 esquinas).
+
+Por USB serie o desde cualquier terminal Bluetooth:
+```
+CORNER 6   (11,1)    abajo-centro
+CORNER 7   (20,11)   derecha-centro
+CORNER 8   (11,20)   arriba-centro
+CORNER 9   (1,11)    izquierda-centro
+CAL FIT              (OK FIT 0.15: el mayor error en grados; > 1° = algún punto mal apuntado)
+PTS                  (PTS 111111111 1)
+CAL SAVE
+```
+La app actual solo conoce los puntos 1 a 5; los 6 a 9 se registran por serie. `INFO` muestra la posición de los servos, el mapa activo y la causa del último reinicio.
+
 ## Si algo no cuadra
 - **← → o ↑ ↓ van al revés:** en la app, «invertir ← →» / «invertir ↑ ↓» (depende de cómo giraron los brazos). No afecta a la calibración.
 - **`ERR LIMIT`:** el servo llegaría a menos de 15° o más de 165°; recentra el brazo en su estriado (se ve al centrar a 90°).

@@ -68,13 +68,24 @@ Compatible hacia atrás. El módulo lo anuncia en `HELLO` con `caps = grid`. Per
 | `GOTO <pan> <tilt>` | mueve a ángulos de servo absolutos (15…165) | igual que `JOG` |
 | `LASER ON` / `LASER OFF` | enciende/apaga el láser **de apuntado** (se apaga solo a los 120 s; `STOP` también) | `OK LASER ON` / `OK LASER OFF` · `ERR DISARMED` |
 | `LASER` | consulta | `LASER ON` / `LASER OFF` |
-| `CORNER <n>` | guarda los ángulos actuales como punto *n*: 1=(1,1) 2=(20,1) 3=(20,20) 4=(1,20) 5=(11,11, control opcional) | `OK CORNER <n> <pan> <tilt>` · `ERR RANGE` |
+| `CORNER <n>` | guarda los ángulos actuales como punto *n*: 1=(1,1) 2=(20,1) 3=(20,20) 4=(1,20) 5=(11,11, control opcional) y, **opcionales desde 0.2.0**, 6=(11,1) 7=(20,11) 8=(11,20) 9=(1,11) (medios de borde) | `OK CORNER <n> <pan> <tilt>` · `ERR RANGE` |
 | `CORNERS` | qué puntos hay y si el mapa está ajustado | `CORNERS <5 dígitos 0/1> <0/1>` (p. ej. `CORNERS 11111 1`) |
-| `CAL FIT` | calcula el mapa con las 4 esquinas; si hay punto 5, informa el error | `OK FIT <err>` (grados; `-` sin punto 5) · `ERR NODATA` (faltan esquinas) · `ERR FIT` (degenerado) |
+| `CAL FIT` | calcula el mapa con las 4 esquinas (exacto) o, si hay medios de borde (6–9), por **mínimos cuadrados** con todos; informa el mayor error (punto de control 5 y/o residuo) | `OK FIT <err>` (grados; `-` sin punto 5) · `ERR NODATA` (faltan esquinas) · `ERR FIT` (degenerado) |
 | `CAL MAP` | qué usa el disparo | `MAP GRID` (mapa por esquinas) / `MAP GEO` (geometría de `config.h`) |
 | `AIM <x> <y>` | mueve a la celda con el mapa actual, **sin tocar el láser** (enteros 1…20, sin paréntesis) | `OK AIM <x> <y>` · `ERR LIMIT` · `ERR STOP` · `ERR DISARMED` |
 
 - `CAL SAVE` / `CAL RESET` guardan/borran **también** el mapa (NVS, clave `grid`); al arrancar, el mapa guardado se recarga solo. Registrar de nuevo una esquina (1…4) invalida el mapa hasta el siguiente `CAL FIT`.
+
+### Novedades del firmware 0.2.0 (2026-11-22)
+| Orden | Qué hace | Respuesta |
+|---|---|---|
+| `PTS` | como `CORNERS` pero con los **9** puntos | `PTS <9 dígitos 0/1> <0/1>` |
+| `INFO` | diagnóstico: tiempo encendido, **causa del último reinicio** (`BROWNOUT` = la fuente se hundió), memoria libre, posición de los servos, mapa y versión | `INFO up=<s> rst=<POWERON\|SW\|PANIC\|BROWNOUT\|WDT\|EXT> heap=<bytes> pan=<°> tilt=<°> map=<GRID\|GEO> fw=<ver>` |
+
+- `CORNERS` sigue devolviendo solo los 5 primeros (lo que lee la app). `HELLO` anuncia `grid,pts9,smooth,info` en las capacidades.
+- Registrar de nuevo cualquier punto salvo el 5 invalida el mapa hasta el siguiente `CAL FIT`. El mapa guardado con 0.1.0 (5 puntos) se sigue leyendo; el nuevo ocupa 80 bytes.
+- **Movimiento:** los dos ejes se mueven a la vez con perfil suave (arranque y frenado graduales, ≤ 2,5° por paso de 20 ms); el eje que va a bajar pasa por un waypoint 2° por debajo y remata subiendo a ≤ 0,4° por paso. Misma orden, mismas respuestas.
+- **Líneas tolerantes:** `(x,y)` se acepta aunque la app del rival no mande salto de línea (se entrega al llegar el `)`), y una orden válida sin terminador se entrega a los 300 ms (solo por Bluetooth).
 - Con el mapa activo, `(x,y)` y `TEST` apuntan con él; sin mapa, con la geometría (v1). Un disparo (`(x,y)`, `TEST`) apaga el láser de apuntado.
 - Los límites de seguridad 15…165° rigen `JOG`, `GOTO` y `AIM`; `STOP` interrumpe cualquiera de ellos (`ERR STOP`).
 - Matemática: con θ = pan y φ = tilt medidos desde 90°, el rayo es `u = tan θ`, `v = tan φ / cos θ`; el plano de la matriz se proyecta a `(u,v)` con una homografía de 8 parámetros, que se resuelve exacta con 4 esquinas. Pruebas nativas: pared vertical y tablero horizontal reproducen las 400 celdas a < 0,02°.

@@ -15,7 +15,7 @@ constexpr double kRad2Deg = 57.295779513082320876798154814105;
 constexpr double kCenterCell = 10.5;   // centro de la matriz 20×20 en coordenadas de celda
 constexpr double kHalfSpan = 9.5;      // media distancia entre la celda 1 y la 20: normaliza a [-1, 1]
 
-constexpr int kCells[GRID_PTS][2] = {{1, 1}, {20, 1}, {20, 20}, {1, 20}, {11, 11}};
+constexpr int kCells[GRID_PTS][2] = {{1, 1}, {20, 1}, {20, 20}, {1, 20}, {11, 11}, {11, 1}, {20, 11}, {11, 20}, {1, 11}};
 
 double norm(int cell) { return (static_cast<double>(cell) - kCenterCell) / kHalfSpan; }
 
@@ -99,10 +99,15 @@ float getF32(const unsigned char* p) {
   memcpy(&v, &u, sizeof v);
   return v;
 }
-constexpr unsigned char kMagic0 = 'G', kMagic1 = 'M', kVersion = 1;
-constexpr unsigned kDataOffset = 4;                       // 'G','M', versión, banderas
-constexpr unsigned kCrcOffset = kDataOffset + 10 * 4;     // 44
-static_assert(kCrcOffset + 2 == GRID_BLOB_SIZE, "el blob del mapa debe medir 46 bytes");
+constexpr unsigned char kMagic0 = 'G', kMagic1 = 'M', kVersion = 2, kVersion1 = 1;
+constexpr unsigned kDataOffset = 6;                                  // 'G','M', versión, has[0..7], banderas, reservado
+constexpr unsigned kCrcOffset = kDataOffset + 2 * GRID_PTS * 4;      // 78
+static_assert(kCrcOffset + 2 == GRID_BLOB_SIZE, "el blob del mapa debe medir 80 bytes");
+// Versión 1 (se lee por compatibilidad): 5 puntos, banderas en un byte (bits 0..4 = has, bit 5 = valid), datos desde el byte 4.
+constexpr unsigned kV1Pts = 5;
+constexpr unsigned kV1DataOffset = 4;
+constexpr unsigned kV1CrcOffset = kV1DataOffset + 2 * kV1Pts * 4;    // 44
+static_assert(kV1CrcOffset + 2 == GRID_BLOB_SIZE_V1, "el blob v1 debe medir 46 bytes");
 
 }  // namespace
 
@@ -119,36 +124,55 @@ bool gridFit(GridCal& g, float& checkErrDeg) {
   g.valid = false;
   if (!gridHasCorners(g)) return false;
 
-  double a[8][9];
-  for (int i = 0; i < 4; ++i) {
+  // Puntos del ajuste: las 4 esquinas y los medios de borde que haya (el punto 4, el centro, queda fuera: es el control).
+  int used[GRID_PTS];
+  int nUsed = 0;
+  for (int i = 0; i < GRID_PTS; ++i) {
+    if (i != 4 && g.has[i]) used[nUsed++] = i;
+  }
+
+  // Ecuaciones normales AtA·h = Atb (8×8). Con 4 puntos el sistema es exacto y equivale a resolverlo directamente.
+  double ata[8][9] = {};
+  for (int k = 0; k < nUsed; ++k) {
+    const int i = used[k];
     double u, v;
     if (!uvOf(g.pan[i], g.tilt[i], u, v)) return false;
     const double x = norm(kCells[i][0]), y = norm(kCells[i][1]);
     // h11 x + h12 y + h13 - u x h31 - u y h32 = u   y   h21 x + h22 y + h23 - v x h31 - v y h32 = v
-    const double r1[9] = {x, y, 1, 0, 0, 0, -u * x, -u * y, u};
-    const double r2[9] = {0, 0, 0, x, y, 1, -v * x, -v * y, v};
-    for (int k = 0; k < 9; ++k) { a[2 * i][k] = r1[k]; a[2 * i + 1][k] = r2[k]; }
+    const double r[2][9] = {{x, y, 1, 0, 0, 0, -u * x, -u * y, u}, {0, 0, 0, x, y, 1, -v * x, -v * y, v}};
+    for (int e = 0; e < 2; ++e) {
+      for (int a = 0; a < 8; ++a) {
+        for (int c = 0; c < 9; ++c) ata[a][c] += r[e][a] * r[e][c];
+      }
+    }
   }
   double h[8];
-  if (!solve8(a, h)) return false;
+  if (!solve8(ata, h)) return false;
   for (int k = 0; k < 8; ++k) g.h[k] = h[k];
 
-  // Las 4 esquinas deben caer dentro del rango de la homografía (w > 0) y repetir los ángulos medidos.
-  for (int i = 0; i < 4; ++i) {
+  // Todos los puntos usados deben caer dentro del rango de la homografía (w > 0) y repetir los ángulos medidos.
+  // Con 4 puntos el ajuste es exacto (tolerancia 0,5°); con más, el residuo es el error de apuntado y se tolera hasta 2,5°.
+  const double tol = nUsed > 4 ? 2.5 : 0.5;
+  double worst = 0.0;
+  for (int k = 0; k < nUsed; ++k) {
+    const int i = used[k];
     double p, t;
     if (!aimFromH(g.h, kCells[i][0], kCells[i][1], p, t)) return false;
-    if (std::fabs(p - g.pan[i]) > 0.5 || std::fabs(t - g.tilt[i]) > 0.5) return false;
+    const double e = std::fmax(std::fabs(p - g.pan[i]), std::fabs(t - g.tilt[i]));
+    if (e > tol) return false;
+    if (e > worst) worst = e;
   }
   g.valid = true;
 
+  double check = -1.0;
+  if (nUsed > 4) check = worst;
   if (g.has[4]) {
     double p, t;
-    if (aimFromH(g.h, kCells[4][0], kCells[4][1], p, t)) {
-      checkErrDeg = static_cast<float>(std::fmax(std::fabs(p - g.pan[4]), std::fabs(t - g.tilt[4])));
-    } else {
-      checkErrDeg = 999.0f;
-    }
+    double e = 999.0;
+    if (aimFromH(g.h, kCells[4][0], kCells[4][1], p, t)) e = std::fmax(std::fabs(p - g.pan[4]), std::fabs(t - g.tilt[4]));
+    if (e > check) check = e;
   }
+  checkErrDeg = static_cast<float>(check);
   return true;
 }
 
@@ -166,12 +190,15 @@ unsigned gridSerialize(const GridCal& g, unsigned char* out, unsigned cap) {
   out[0] = kMagic0;
   out[1] = kMagic1;
   out[2] = kVersion;
-  unsigned char flags = 0;
-  for (int i = 0; i < GRID_PTS; ++i) {
-    if (g.has[i]) flags = static_cast<unsigned char>(flags | (1u << i));
+  unsigned char lo = 0, hi = 0;
+  for (int i = 0; i < 8; ++i) {
+    if (g.has[i]) lo = static_cast<unsigned char>(lo | (1u << i));
   }
-  if (g.valid) flags = static_cast<unsigned char>(flags | (1u << 5));
-  out[3] = flags;
+  if (g.has[8]) hi = static_cast<unsigned char>(hi | 1u);
+  if (g.valid) hi = static_cast<unsigned char>(hi | 2u);
+  out[3] = lo;
+  out[4] = hi;
+  out[5] = 0;
   for (int i = 0; i < GRID_PTS; ++i) {
     putF32(out + kDataOffset + 4 * i, g.pan[i]);
     putF32(out + kDataOffset + 4 * (GRID_PTS + i), g.tilt[i]);
@@ -183,20 +210,37 @@ unsigned gridSerialize(const GridCal& g, unsigned char* out, unsigned cap) {
 }
 
 bool gridDeserialize(const unsigned char* in, unsigned n, GridCal& out) {
-  if (in == nullptr || n != GRID_BLOB_SIZE) return false;
-  if (in[0] != kMagic0 || in[1] != kMagic1 || in[2] != kVersion) return false;
-  const uint16_t stored = static_cast<uint16_t>(in[kCrcOffset] | (static_cast<uint16_t>(in[kCrcOffset + 1]) << 8));
-  if (crc16(in, kCrcOffset) != stored) return false;
+  if (in == nullptr || (n != GRID_BLOB_SIZE && n != GRID_BLOB_SIZE_V1)) return false;
+  if (in[0] != kMagic0 || in[1] != kMagic1) return false;
 
   GridCal g;
-  const unsigned char flags = in[3];
+  bool wasValid = false;
+  if (n == GRID_BLOB_SIZE_V1) {
+    if (in[2] != kVersion1) return false;
+    const uint16_t stored = static_cast<uint16_t>(in[kV1CrcOffset] | (static_cast<uint16_t>(in[kV1CrcOffset + 1]) << 8));
+    if (crc16(in, kV1CrcOffset) != stored) return false;
+    const unsigned char flags = in[3];
+    for (unsigned i = 0; i < kV1Pts; ++i) {
+      g.has[i] = (flags >> i) & 1u;
+      g.pan[i] = getF32(in + kV1DataOffset + 4 * i);
+      g.tilt[i] = getF32(in + kV1DataOffset + 4 * (kV1Pts + i));
+    }
+    wasValid = (flags >> 5) & 1u;
+  } else {
+    if (in[2] != kVersion) return false;
+    const uint16_t stored = static_cast<uint16_t>(in[kCrcOffset] | (static_cast<uint16_t>(in[kCrcOffset + 1]) << 8));
+    if (crc16(in, kCrcOffset) != stored) return false;
+    for (int i = 0; i < GRID_PTS; ++i) {
+      g.has[i] = i < 8 ? ((in[3] >> i) & 1u) : (in[4] & 1u);
+      g.pan[i] = getF32(in + kDataOffset + 4 * i);
+      g.tilt[i] = getF32(in + kDataOffset + 4 * (GRID_PTS + i));
+    }
+    wasValid = (in[4] >> 1) & 1u;
+  }
   for (int i = 0; i < GRID_PTS; ++i) {
-    g.has[i] = (flags >> i) & 1u;
-    g.pan[i] = getF32(in + kDataOffset + 4 * i);
-    g.tilt[i] = getF32(in + kDataOffset + 4 * (GRID_PTS + i));
     if (g.has[i] && !(g.pan[i] >= 0.0f && g.pan[i] <= 180.0f && g.tilt[i] >= 0.0f && g.tilt[i] <= 180.0f)) return false;
   }
-  if ((flags >> 5) & 1u) {
+  if (wasValid) {
     float err;
     if (!gridFit(g, err)) return false;   // se recalcula: un blob "válido" que ya no ajusta se rechaza
   }

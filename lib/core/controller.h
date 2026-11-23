@@ -4,8 +4,9 @@
 // COMPORTAMIENTO OBLIGATORIO (las pruebas nativas lo verifican con HAL falsos):
 //  1. begin(): láser APAGADO lo primero; carga la calibración del CalStore (o defaultCalibration()); servos SIN activar (detach).
 //  2. handleLine(): parseLine(); si hay error de sintaxis responde errorText(); si está ocupado responde "ERR BUSY".
-//  3. FIRE (x,y): aimAtCell(); si !ok → "ERR LIMIT". Secuencia: láser OFF → attach servos → toServo() → por eje, si approach()
-//     pide waypoint, ir primero al waypoint → ir al ángulo final con rampa (pasos ≤ cfg::MAX_STEP_DEG cada cfg::STEP_MS) →
+//  3. FIRE (x,y): aimAtCell(); si !ok → "ERR LIMIT". Secuencia: láser OFF → attach servos → toServo() → movimiento SINCRONIZADO
+//     de los dos ejes con perfil suave (pasos ≤ cfg::MAX_STEP_DEG cada cfg::STEP_MS); el eje que va a bajar pasa antes por un
+//     waypoint (destino − cfg::OVERSHOOT_DEG) y remata subiendo despacio (≤ cfg::CREEP_STEP_DEG por paso) →
 //     delayMs(cfg::SETTLE_MS) → comprobar interlock (no hay STOP pendiente) → láser ON → buzzer.beep(cfg::BEEP_HZ, cfg::BEEP_MS) →
 //     delayMs(cfg::LASER_ON_MS) → láser OFF → responder fireOkText(x,y). Los servos quedan activos (reteniendo).
 //     INVARIANTE DE SEGURIDAD: el láser solo está encendido entre el interlock y el fin del tiempo de permanencia; NUNCA mientras se mueve un servo.
@@ -39,6 +40,7 @@ class Controller {
     std::string mode = "BT";                 // modo de arranque: "BT" o "WIFI"
     std::string caps = "-";                  // capacidades separadas por comas, sin espacios (p. ej. "ws,stream")
     std::function<bool(int)> requestMode;    // 1 = BT, 2 = WIFI; true si lo acepta (el firmware reinicia tras responder)
+    std::function<std::string()> info;       // diagnóstico de la plataforma ("up=12 rst=POWERON heap=200000"); vacío = "-"
     std::function<int()> armedSeconds;       // segundos de armado que quedan (0 = desarmado); vacío = no se exige armado
   };
   void setLink(const Link& l) { link_ = l; }
@@ -78,7 +80,7 @@ class Controller {
   bool targetFor(Cell c, ServoCmd& out) const;  // ángulos de servo de una celda (mapa por esquinas si lo hay; si no, geometría)
   void attachServos();
   bool fire(Cell c, std::string& errLine);
-  void moveAxis(hal::Servo& s, float& nowDeg, float targetDeg);
+  void moveTo(float panDeg, float tiltDeg);     // movimiento sincronizado y suave de los dos ejes (ver controller.cpp)
 };
 
 }  // namespace core

@@ -12,6 +12,7 @@
 
 #include "config.h"
 #include "controller.h"
+#include "../../lib/hal_esp32/line_transport.h"   // solo cabecera: el ensamblador de líneas se prueba en el PC
 #include "fakes.h"
 #include "geometry.h"
 #include "gridmap.h"
@@ -85,83 +86,85 @@ static int countLaserOn(const Rig& r) {
   return n;
 }
 
-// Describe los eventos desde `from` como una lista de textos legible. Las rampas (escritura de servo seguida de
-// delayMs(STEP_MS)) se agrupan por servo y sentido:  "MOVE pan up n=24 end=136.62".  Una escritura suelta (sin esa
-// espera) es  "W pan 90.00".  Las respuestas aparecen como  "REPLY <texto>".
+// Describe los eventos desde `from` como una lista de textos legible. Cada PASO de movimiento (una o dos escrituras de
+// servo, pan y luego tilt, seguidas de delayMs(STEP_MS)) se agrupa con los consecutivos en un solo texto:
+// "MOVE n=24 pan=91.68 tilt=136.62" (pasos y posición final de cada eje). Las escrituras de retención al activar los
+// servos (o cualquier otra sin esa espera) son  "W pan 90.00".  Las respuestas aparecen como  "REPLY <texto>".
 static std::vector<std::string> describe(const Rig& r, size_t from) {
   struct Tok {
     std::string text;
     bool move = false;
-    int servo = 0;
-    bool up = false;
     int n = 0;
-    float end = 0.0f;
+    float pan = 0.0f, tilt = 0.0f;
   };
+  const std::vector<Event>& ev = r.log.events;
+  std::vector<char> att(ev.size(), 0), step(ev.size(), 0);
+  for (size_t i = 0; i < ev.size(); ++i) {   // las 2 escrituras que siguen al ATTACH del tilt son de retención, no de movimiento
+    if (ev[i].kind == Ev::ServoAttach && ev[i].servo == 1) {
+      size_t n = 0;
+      for (size_t j = i + 1; j < ev.size() && n < 2 && ev[j].kind == Ev::ServoWrite; ++j, ++n) att[j] = 1;
+    }
+  }
+  for (size_t i = 1; i < ev.size(); ++i) {
+    if (ev[i].kind != Ev::Delay || ev[i].ms != cfg::STEP_MS) continue;
+    const size_t j = i - 1;
+    if (ev[j].kind != Ev::ServoWrite || att[j]) continue;
+    step[j] = 1;
+    if (ev[j].servo == 1 && j >= 1 && ev[j - 1].kind == Ev::ServoWrite && ev[j - 1].servo == 0 && !att[j - 1]) step[j - 1] = 1;
+  }
+
   std::vector<Tok> toks;
   float last[2] = {NAN, NAN};
-  const std::vector<Event>& ev = r.log.events;
-
   for (size_t i = 0; i < ev.size(); ++i) {
     const Event& e = ev[i];
     const bool emit = (i >= from);
-    switch (e.kind) {
-      case Ev::ServoWrite: {
-        const bool ramp = (i + 1 < ev.size()) && ev[i + 1].kind == Ev::Delay && ev[i + 1].ms == cfg::STEP_MS;
-        const bool up = !(e.deg < last[e.servo]);
-        last[e.servo] = e.deg;
-        if (ramp) {
-          if (emit) {
-            if (!toks.empty() && toks.back().move && toks.back().servo == e.servo && toks.back().up == up) {
-              ++toks.back().n;
-              toks.back().end = e.deg;
-            } else {
-              Tok t;
-              t.move = true;
-              t.servo = e.servo;
-              t.up = up;
-              t.n = 1;
-              t.end = e.deg;
-              toks.push_back(t);
-            }
-          }
-          ++i;   // la espera de la rampa ya está contada
-        } else if (emit) {
-          Tok t;
-          t.text = std::string("W ") + servoName(e.servo) + " " + f2(e.deg);
-          toks.push_back(t);
-        }
-        break;
-      }
-      default: {
-        if (!emit) break;
+    if (e.kind == Ev::ServoWrite) {
+      last[e.servo] = e.deg;
+      if (step[i]) continue;   // se cuenta al llegar a su espera
+      if (emit) {
         Tok t;
-        switch (e.kind) {
-          case Ev::ServoAttach: t.text = std::string("ATTACH ") + servoName(e.servo); break;
-          case Ev::ServoDetach: t.text = std::string("DETACH ") + servoName(e.servo); break;
-          case Ev::LaserSet:    t.text = std::string("LASER ") + (e.on ? "1" : "0"); break;
-          case Ev::Delay:       t.text = "DELAY " + num(e.ms); break;
-          case Ev::Beep:        t.text = "BEEP " + num(e.hz) + " " + num(e.ms); break;
-          case Ev::LedSet:      t.text = std::string("LED ") + (e.on ? "1" : "0"); break;
-          case Ev::StoreLoad:   t.text = "STORE LOAD"; break;
-          case Ev::StoreSave:   t.text = "STORE SAVE"; break;
-          case Ev::StoreErase:  t.text = "STORE ERASE"; break;
-          case Ev::Reply:       t.text = "REPLY " + e.text; break;
-          default: break;
-        }
+        t.text = std::string("W ") + servoName(e.servo) + " " + f2(e.deg);
         toks.push_back(t);
-        break;
       }
+      continue;
     }
+    if (e.kind == Ev::Delay && e.ms == cfg::STEP_MS && i > 0 && ev[i - 1].kind == Ev::ServoWrite && step[i - 1]) {
+      if (!emit) continue;
+      if (!toks.empty() && toks.back().move) {
+        ++toks.back().n;
+        toks.back().pan = last[0];
+        toks.back().tilt = last[1];
+      } else {
+        Tok t;
+        t.move = true;
+        t.n = 1;
+        t.pan = last[0];
+        t.tilt = last[1];
+        toks.push_back(t);
+      }
+      continue;
+    }
+    if (!emit) continue;
+    Tok t;
+    switch (e.kind) {
+      case Ev::ServoAttach: t.text = std::string("ATTACH ") + servoName(e.servo); break;
+      case Ev::ServoDetach: t.text = std::string("DETACH ") + servoName(e.servo); break;
+      case Ev::LaserSet:    t.text = std::string("LASER ") + (e.on ? "1" : "0"); break;
+      case Ev::Delay:       t.text = "DELAY " + num(e.ms); break;
+      case Ev::Beep:        t.text = "BEEP " + num(e.hz) + " " + num(e.ms); break;
+      case Ev::LedSet:      t.text = std::string("LED ") + (e.on ? "1" : "0"); break;
+      case Ev::StoreLoad:   t.text = "STORE LOAD"; break;
+      case Ev::StoreSave:   t.text = "STORE SAVE"; break;
+      case Ev::StoreErase:  t.text = "STORE ERASE"; break;
+      case Ev::Reply:       t.text = "REPLY " + e.text; break;
+      default: break;
+    }
+    toks.push_back(t);
   }
 
   std::vector<std::string> out;
   for (const Tok& t : toks) {
-    if (t.move) {
-      out.push_back(std::string("MOVE ") + servoName(t.servo) + (t.up ? " up" : " down") + " n=" + num((unsigned long)t.n) +
-                    " end=" + f2(t.end));
-    } else {
-      out.push_back(t.text);
-    }
+    out.push_back(t.move ? std::string("MOVE n=") + num((unsigned long)t.n) + " pan=" + f2(t.pan) + " tilt=" + f2(t.tilt) : t.text);
   }
   return out;
 }
@@ -801,10 +804,10 @@ static void test_fire_exact_sequence(void) {
   const std::vector<std::string> reply = r.send("(11,11)");
   EXPECT_REPLIES(reply, "OK (11,11)");
 
-  // Celda (11,11): pan servo 91.68, tilt servo 136.62. Ambos suben desde 90, así que no hay waypoint.
+  // Celda (11,11): pan servo 91.68, tilt servo 136.62. Ambos suben desde 90 (sin waypoint) y llegan JUNTOS en 35 pasos.
   const std::vector<std::string> expected = cat(
       {"LASER 0", "ATTACH pan", "ATTACH tilt", "W pan 90.00", "W tilt 90.00",
-       "MOVE pan up n=1 end=91.68", "MOVE tilt up n=24 end=136.62"},
+       "MOVE n=35 pan=91.68 tilt=136.62"},
       shotTail(11, 11));
   EXPECT_TOKENS(expected, describe(r, m));
   checkSafety(r);
@@ -819,23 +822,18 @@ static void test_fire_waypoint_when_descending(void) {
   r.ctrl.begin();
   r.send("(11,11)");
 
-  // (11,11) -> (1,1): el pan baja de 91.68 a 36.38 (waypoint 34.38, luego sube 2°); el tilt sube de 136.62 a 146.75.
+  // (11,11) -> (1,1): el pan baja de 91.68 a 36.38 (waypoint 34.38, luego remata subiendo 2° despacio); el tilt sube de
+  // 136.62 a 146.75 durante el primer tramo. Todo en un solo movimiento sincronizado de 53 pasos.
   size_t m = mark(r);
   std::vector<std::string> reply = r.send("(1,1)");
   EXPECT_REPLIES(reply, "OK (1,1)");
-  EXPECT_TOKENS(cat({"LASER 0", "MOVE pan down n=29 end=34.38", "MOVE pan up n=1 end=36.38",
-                     "MOVE tilt up n=6 end=146.75"},
-                    shotTail(1, 1)),
-                describe(r, m));
+  EXPECT_TOKENS(cat({"LASER 0", "MOVE n=53 pan=36.38 tilt=146.75"}, shotTail(1, 1)), describe(r, m));
 
   // (1,1) -> (20,20): el pan sube hasta 110.07 (sin waypoint); el tilt baja de 146.75 a 123.03 (waypoint 121.03).
   m = mark(r);
   reply = r.send("(20,20)");
   EXPECT_REPLIES(reply, "OK (20,20)");
-  EXPECT_TOKENS(cat({"LASER 0", "MOVE pan up n=37 end=110.07", "MOVE tilt down n=13 end=121.03",
-                     "MOVE tilt up n=1 end=123.03"},
-                    shotTail(20, 20)),
-                describe(r, m));
+  EXPECT_TOKENS(cat({"LASER 0", "MOVE n=66 pan=110.07 tilt=123.03"}, shotTail(20, 20)), describe(r, m));
 
   // Repetir la misma celda: ya está allí, no hay movimiento ni waypoint.
   m = mark(r);
@@ -1211,7 +1209,7 @@ static void test_ping(void) {
   const std::string expected = std::string("PONG ") + DEVICE_NAME + " " + FW_VERSION;
   EXPECT_REPLIES(r.send("PING"), expected);
   EXPECT_REPLIES(r.send("ping\r\n"), expected);
-  TEST_ASSERT_EQUAL_STRING("PONG SONAR-A 0.1.0", expected.c_str());   // valores por defecto de config.h
+  TEST_ASSERT_EQUAL_STRING("PONG SONAR-A 0.2.0", expected.c_str());   // valores por defecto de config.h
 }
 
 static void test_cal_show_and_set(void) {
@@ -1494,7 +1492,7 @@ static void test_grid_serialize_round_trip_and_corruption(void) {
   const core::GridCal g = fitWith(wallAngles, true);
   unsigned char buf[core::GRID_BLOB_SIZE + 1];
   memset(buf, 0xAA, sizeof buf);
-  TEST_ASSERT_EQUAL_UINT(46, core::GRID_BLOB_SIZE);
+  TEST_ASSERT_EQUAL_UINT(80, core::GRID_BLOB_SIZE);
   TEST_ASSERT_EQUAL_UINT(core::GRID_BLOB_SIZE, core::gridSerialize(g, buf, core::GRID_BLOB_SIZE));
   TEST_ASSERT_EQUAL_HEX8(0xAA, buf[core::GRID_BLOB_SIZE]);   // no escribe de más
   core::GridCal back;
@@ -1549,7 +1547,11 @@ static void test_parse_v3(void) {
   bad("GOTO 14 90", core::ParseError::Range);
   bad("GOTO 90 166", core::ParseError::Range);
   bad("CORNER 0", core::ParseError::Range);
-  bad("CORNER 6", core::ParseError::Range);
+  ok("CORNER 6", core::CmdType::Corner);   // 6..9 = medios de borde opcionales
+  ok("corner 9", core::CmdType::Corner);
+  ok("PTS", core::CmdType::Pts);
+  bad("CORNER 10", core::ParseError::Range);
+  bad("PTS 1", core::ParseError::BadFormat);
   bad("CORNER", core::ParseError::BadFormat);
   bad("CORNER 1.5", core::ParseError::BadFormat);
   bad("AIM 0 5", core::ParseError::Range);
@@ -1711,6 +1713,270 @@ static void test_calibration_commands_respect_arming(void) {
 
 // =====================================================================================================================
 
+
+// =====================================================================================================================
+// 9. Movimiento suave y sincronizado; calibración con más puntos
+// =====================================================================================================================
+
+// Posiciones sucesivas (pan, tilt) de un movimiento: una entrada por paso de rampa (escritura + delayMs(STEP_MS)).
+struct Path {
+  std::vector<float> pan, tilt;
+};
+static Path pathOf(const Rig& r, size_t from, float pan0, float tilt0) {
+  Path p;
+  float cp = pan0, ct = tilt0;
+  p.pan.push_back(cp);
+  p.tilt.push_back(ct);
+  for (size_t i = from; i < r.log.events.size(); ++i) {
+    const Event& e = r.log.events[i];
+    if (e.kind == Ev::ServoWrite) {
+      (e.servo == 0 ? cp : ct) = e.deg;
+    } else if (e.kind == Ev::Delay && e.ms == cfg::STEP_MS) {
+      p.pan.push_back(cp);
+      p.tilt.push_back(ct);
+    }
+  }
+  return p;
+}
+
+static void test_motion_is_smooth_synchronized_and_creeps_in(void) {
+  Rig r;
+  r.ctrl.begin();
+  r.send("(11,11)");
+  const float p0 = r.pan.lastDeg, t0 = r.tilt.lastDeg;
+  const size_t m = mark(r);
+  EXPECT_REPLIES(r.send("(1,1)"), "OK (1,1)");   // el pan baja (waypoint + remate); el tilt sube
+  const Path p = pathOf(r, m, p0, t0);
+  TEST_ASSERT_TRUE(p.pan.size() > 20);
+
+  // Sincronizado: los dos ejes avanzan en el mismo paso, no uno después del otro.
+  int both = 0;
+  for (size_t i = 1; i < p.pan.size(); ++i) {
+    if (p.pan[i] != p.pan[i - 1] && p.tilt[i] != p.tilt[i - 1]) ++both;
+  }
+  TEST_ASSERT_TRUE_MESSAGE(both >= 10, "los dos ejes deben moverse a la vez");
+
+  // Suave: el primer paso es una fracción del máximo (arranque gradual) y ningún paso lo supera.
+  float maxStep = 0.0f;
+  for (size_t i = 1; i < p.pan.size(); ++i) maxStep = fmaxf(maxStep, fabsf(p.pan[i] - p.pan[i - 1]));
+  TEST_ASSERT_TRUE(maxStep <= cfg::MAX_STEP_DEG + 1e-3f);
+  TEST_ASSERT_TRUE(maxStep > 0.8f * cfg::MAX_STEP_DEG);   // llega a su velocidad de crucero
+  TEST_ASSERT_TRUE_MESSAGE(fabsf(p.pan[1] - p.pan[0]) < 0.1f * cfg::MAX_STEP_DEG, "arranque gradual");
+
+  // Aproximación desde abajo: el pan baja hasta el waypoint (destino - OVERSHOOT) y remata SUBIENDO, despacio, sin rebote.
+  const float target = p.pan.back();
+  float minPan = p.pan[0];
+  size_t iMin = 0;
+  for (size_t i = 0; i < p.pan.size(); ++i) {
+    if (p.pan[i] < minPan) { minPan = p.pan[i]; iMin = i; }
+  }
+  TEST_ASSERT_FLOAT_WITHIN(1e-3f, target - cfg::OVERSHOOT_DEG, minPan);
+  for (size_t i = iMin + 1; i < p.pan.size(); ++i) {
+    TEST_ASSERT_TRUE_MESSAGE(p.pan[i] >= p.pan[i - 1], "el remate solo sube");
+    TEST_ASSERT_TRUE(p.pan[i] - p.pan[i - 1] <= cfg::CREEP_STEP_DEG + 1e-3f);
+  }
+  checkSafety(r);
+}
+
+static void test_motion_tiny_move_is_not_redone(void) {
+  Rig r;
+  r.ctrl.begin();
+  r.send("(11,11)");
+  const size_t m = mark(r);
+  EXPECT_REPLIES(r.send("(11,11)"), "OK (11,11)");       // ya está: ni un paso de servo
+  for (size_t i = m; i < r.log.events.size(); ++i) TEST_ASSERT_FALSE(r.log.events[i].kind == Ev::ServoWrite);
+  r.send("JOG 0 0.005");                                  // por debajo de MOVE_EPS: tampoco hace waypoint
+  r.send("JOG 0 -0.005");
+  checkSafety(r);
+}
+
+static core::GridCal fitNine(void (*model)(int, int, float&, float&), float noiseDeg, uint32_t seed, float* err = nullptr) {
+  core::GridCal g;
+  uint32_t rng = seed;
+  const auto noise = [&]() {   // LCG: reproducible
+    rng = rng * 1664525u + 1013904223u;
+    return (static_cast<float>((rng >> 8) & 0xFFFF) / 32768.0f - 1.0f) * noiseDeg;
+  };
+  for (int n = 0; n < core::GRID_PTS; ++n) {
+    int x, y;
+    core::gridPointCell(n, x, y);
+    model(x, y, g.pan[n], g.tilt[n]);
+    g.pan[n] += noise();
+    g.tilt[n] += noise();
+    g.has[n] = true;
+  }
+  float e = -2.0f;
+  TEST_ASSERT_TRUE(core::gridFit(g, e));
+  if (err) *err = e;
+  return g;
+}
+
+static float gridWorst(const core::GridCal& g, void (*model)(int, int, float&, float&)) {
+  float worst = 0.0f;
+  for (int y = 1; y <= 20; ++y) {
+    for (int x = 1; x <= 20; ++x) {
+      float mp, mt, gp, gt;
+      model(x, y, mp, mt);
+      TEST_ASSERT_TRUE(core::gridAim(g, x, y, gp, gt));
+      worst = fmaxf(worst, fmaxf(fabsf(gp - mp), fabsf(gt - mt)));
+    }
+  }
+  return worst;
+}
+
+static void test_grid_lsq_with_edge_midpoints(void) {
+  // Sin ruido, con los 9 puntos el ajuste sigue siendo exacto en las 400 celdas y el residuo es ~0.
+  float err = -2.0f;
+  const core::GridCal clean = fitNine(wallAngles, 0.0f, 1u, &err);
+  TEST_ASSERT_TRUE(err >= 0.0f && err < 0.01f);
+  TEST_ASSERT_TRUE(gridWorst(clean, wallAngles) <= 0.02f);
+
+  // Con el mismo error de apuntado a mano (±0,3°) en cada punto, usar los 9 puntos por mínimos cuadrados reparte el error:
+  // el peor caso sobre las 400 celdas mejora, en promedio, frente a fiarse de solo 4 esquinas.
+  double sum4 = 0.0, sum9 = 0.0;
+  for (uint32_t seed = 1; seed <= 25; ++seed) {
+    core::GridCal g9 = fitNine(wallAngles, 0.3f, seed * 7919u);
+    core::GridCal g4 = g9;
+    for (int i = 5; i < 9; ++i) g4.has[i] = false;      // mismas mediciones, sin los medios de borde
+    float e4;
+    TEST_ASSERT_TRUE(core::gridFit(g4, e4));
+    sum4 += gridWorst(g4, wallAngles);
+    sum9 += gridWorst(g9, wallAngles);
+  }
+  TEST_ASSERT_TRUE_MESSAGE(sum9 < sum4, ("LSQ 9 puntos: " + f2((float)(sum9 / 25)) + " vs 4 esquinas: " + f2((float)(sum4 / 25))).c_str());
+
+  // Un medio de borde mal apuntado 4° se rechaza (no se acepta un mapa que no se sostiene).
+  core::GridCal bad = fitNine(wallAngles, 0.0f, 1u);
+  bad.pan[6] += 4.0f;
+  float e;
+  TEST_ASSERT_FALSE(core::gridFit(bad, e));
+  TEST_ASSERT_FALSE(bad.valid);
+}
+
+static void test_grid_blob_v1_still_loads(void) {
+  // Blob de la versión anterior (5 puntos, 46 bytes), armado a mano: una calibración guardada antes sigue valiendo.
+  const core::GridCal g = fitWith(wallAngles, true);
+  unsigned char v1[core::GRID_BLOB_SIZE_V1] = {'G', 'M', 1, 0};
+  unsigned char flags = 0;
+  for (int i = 0; i < 5; ++i) flags = static_cast<unsigned char>(flags | (1u << i));
+  flags = static_cast<unsigned char>(flags | (1u << 5));
+  v1[3] = flags;
+  for (int i = 0; i < 5; ++i) {
+    memcpy(v1 + 4 + 4 * i, &g.pan[i], 4);
+    memcpy(v1 + 4 + 4 * (5 + i), &g.tilt[i], 4);
+  }
+  uint16_t crc = 0xFFFF;
+  for (unsigned i = 0; i < 44; ++i) {
+    crc = static_cast<uint16_t>(crc ^ (static_cast<uint16_t>(v1[i]) << 8));
+    for (int b = 0; b < 8; ++b) crc = (crc & 0x8000) ? static_cast<uint16_t>((crc << 1) ^ 0x1021) : static_cast<uint16_t>(crc << 1);
+  }
+  v1[44] = static_cast<unsigned char>(crc & 0xFF);
+  v1[45] = static_cast<unsigned char>(crc >> 8);
+  core::GridCal back;
+  TEST_ASSERT_TRUE(core::gridDeserialize(v1, core::GRID_BLOB_SIZE_V1, back));
+  TEST_ASSERT_TRUE(back.valid);
+  TEST_ASSERT_TRUE(back.has[4] && !back.has[5]);
+  TEST_ASSERT_TRUE(gridWorst(back, wallAngles) <= 0.02f);
+  v1[10] ^= 1;
+  TEST_ASSERT_FALSE(core::gridDeserialize(v1, core::GRID_BLOB_SIZE_V1, back));   // CRC malo
+}
+
+static void test_corner_6_to_9_and_pts_command(void) {
+  Rig r;
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("PTS"), "PTS 000000000 0");
+  r.send("LASER ON");
+  for (int n = 1; n <= 9; ++n) {
+    float p, t;
+    int x, y;
+    core::gridPointCell(n - 1, x, y);
+    wallAngles(x, y, p, t);
+    r.send("GOTO " + f2(p) + " " + f2(t));
+    const std::vector<std::string> a = r.send("CORNER " + num((unsigned long)n));
+    TEST_ASSERT_EQUAL_INT(1, (int)a.size());
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, (int)a[0].rfind("OK CORNER " + num((unsigned long)n), 0), a[0].c_str());
+  }
+  EXPECT_REPLIES(r.send("PTS"), "PTS 111111111 0");
+  EXPECT_REPLIES(r.send("CORNERS"), "CORNERS 11111 0");   // la app sigue leyendo solo los 5 primeros
+  const std::vector<std::string> fit = r.send("CAL FIT");
+  TEST_ASSERT_EQUAL_INT(1, (int)fit.size());
+  TEST_ASSERT_EQUAL_INT(0, (int)fit[0].rfind("OK FIT", 0));
+  EXPECT_REPLIES(r.send("PTS"), "PTS 111111111 1");
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GRID");
+  float p7, t7;
+  wallAngles(20, 11, p7, t7);
+  r.send("GOTO " + f2(p7) + " " + f2(t7));
+  r.send("CORNER 7");                                      // volver a registrar un medio de borde invalida el mapa hasta recalcular
+  EXPECT_REPLIES(r.send("CAL MAP"), "MAP GEO");
+  const std::vector<std::string> refit = r.send("CAL FIT");
+  TEST_ASSERT_EQUAL_INT(1, (int)refit.size());
+  TEST_ASSERT_EQUAL_INT(0, (int)refit[0].rfind("OK FIT", 0));
+}
+
+
+// =====================================================================================================================
+// 10. Robustez con apps ajenas y diagnóstico
+// =====================================================================================================================
+
+static void expectLines(const std::vector<std::string>& e, const std::vector<std::string>& g) {
+  TEST_ASSERT_EQUAL_STRING(join(e, "\n").c_str(), join(g, "\n").c_str());
+}
+
+// Alimenta una cadena byte a byte; devuelve las líneas completas que salieron.
+static std::vector<std::string> feedAll(transport::LineAssembler& a, const std::string& bytes, uint32_t t0 = 0) {
+  std::vector<std::string> lines;
+  uint32_t t = t0;
+  for (unsigned char c : bytes) {
+    std::string out;
+    if (a.feed(c, out, t++)) lines.push_back(out);
+  }
+  return lines;
+}
+
+static void test_line_assembler_classic_and_tolerant(void) {
+  transport::LineAssembler a;
+  expectLines({"PING", "(3,4)"}, feedAll(a, "PING\r\n(3,4)\n"));        // lo clásico
+  expectLines({"(5,7)"}, feedAll(a, "(5,7)"));                          // sin salto de línea
+  expectLines({}, feedAll(a, "\r\n"));                                  // el salto que sigue se descarta
+  expectLines({"( 12 , 7 )"}, feedAll(a, "( 12 , 7 )\n"));              // con espacios y salto
+  expectLines({"(1,1)", "(20,20)"}, feedAll(a, "(1,1)(20,20)"));        // dos seguidas sin separador
+  expectLines({}, feedAll(a, "\n"));
+  // Una línea larga o rara no se parte por un ')' suelto.
+  expectLines({"CAL SET (1,2) 3"}, feedAll(a, "CAL SET (1,2) 3\n"));
+  expectLines({"(1,2,3)"}, feedAll(a, "(1,2,3)\n"));                    // 2 comas: no es un disparo, espera el salto
+  // El salto en solitario, sin disparo previo, sigue entregando la línea vacía (el controlador responde ERR EMPTY).
+  expectLines({""}, feedAll(a, "\n"));
+}
+
+static void test_line_assembler_idle_flush(void) {
+  transport::LineAssembler a;
+  std::string out;
+  feedAll(a, "TEST", 1000);
+  TEST_ASSERT_FALSE(a.flushIdle(out, 1100));                 // aún no pasó el tiempo
+  TEST_ASSERT_TRUE(a.flushIdle(out, 1000 + 4 + 300));        // pasó: es una orden válida y se entrega
+  TEST_ASSERT_EQUAL_STRING("TEST", out.c_str());
+  expectLines({}, feedAll(a, "\n", 2000));                   // el salto tardío no genera línea vacía
+  feedAll(a, "PIN", 3000);
+  TEST_ASSERT_FALSE(a.flushIdle(out, 4000));                 // "PIN" no es una orden: no se entrega a medias
+  expectLines({"PING"}, feedAll(a, "G\n", 4001));            // y la línea se completa con normalidad
+}
+
+static void test_info_command(void) {
+  Rig r;
+  core::Controller::Link l;
+  l.info = []() { return std::string("up=5 rst=POWERON heap=1000"); };
+  r.ctrl.setLink(l);
+  r.ctrl.begin();
+  EXPECT_REPLIES(r.send("INFO"), std::string("INFO up=5 rst=POWERON heap=1000 pan=90.00 tilt=90.00 map=GEO fw=") + FW_VERSION);
+  r.send("(11,11)");
+  const std::vector<std::string> a = r.send("info");
+  TEST_ASSERT_EQUAL_INT(1, (int)a.size());
+  TEST_ASSERT_TRUE(a[0].find("pan=91.68 tilt=136.62") != std::string::npos);
+  Rig r2;                                                    // sin manejador de plataforma: "-"
+  r2.ctrl.begin();
+  EXPECT_REPLIES(r2.send("INFO"), std::string("INFO - pan=90.00 tilt=90.00 map=GEO fw=") + FW_VERSION);
+}
+
 int main() {
   UNITY_BEGIN();
 
@@ -1786,6 +2052,14 @@ int main() {
   RUN_TEST(test_jog_goto_limits_and_stop);
   RUN_TEST(test_aim_laser_on_off_timeout_stop_and_fire);
   RUN_TEST(test_calibration_commands_respect_arming);
+  RUN_TEST(test_motion_is_smooth_synchronized_and_creeps_in);
+  RUN_TEST(test_motion_tiny_move_is_not_redone);
+  RUN_TEST(test_grid_lsq_with_edge_midpoints);
+  RUN_TEST(test_grid_blob_v1_still_loads);
+  RUN_TEST(test_corner_6_to_9_and_pts_command);
+  RUN_TEST(test_line_assembler_classic_and_tolerant);
+  RUN_TEST(test_line_assembler_idle_flush);
+  RUN_TEST(test_info_command);
 
   return UNITY_END();
 }

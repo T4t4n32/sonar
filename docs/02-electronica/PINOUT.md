@@ -2,8 +2,8 @@
 
 | Señal | GPIO | Conexión |
 |---|---|---|
-| Servo **pan** (MG996R) | 18 | señal; alimentación a 6 V; GND común con el ESP32 |
-| Servo **tilt** (MG90S) | 19 | señal; alimentación a 6 V |
+| Servo **pan** (Tower Pro SG5010) | 18 | señal; alimentación a 6 V (4 pilas AA o fuente); GND común con el ESP32 |
+| Servo **tilt** (Tower Pro SG5010) | 19 | señal; alimentación a 6 V; **1000 µF entre + y GND junto a los servos** |
 | **Láser** (KY-008, 3 pines: `S`, medio sin usar, `-`) | 23 | **Con transistor (recomendado):** GPIO → 1 kΩ → base del 2N2222; emisor a GND; láser entre +5 V (pin `S`) y el colector (pin `-`); **10 kΩ de la base a GND** (queda apagado al arrancar). **Directo (plan B, probado como válido):** pin `S` → GPIO 23, pin `-` → GND (≈ 20–30 mA por el pin y algo menos de brillo). Patillas del 2N2222: según el encapsulado (TO-18 metálico o TO-92 de plástico) E-B-C o C-B-E; verifícalas con el multímetro en modo diodo |
 | **Interruptor general** | — (no es GPIO) | mecánico, en serie con la entrada de 6 V, antes de cualquier regulador; corta/da paso a toda la alimentación (servos + ESP32) de una vez |
 
@@ -15,7 +15,7 @@ Lo siguiente **ya no se arma**. El firmware conserva los pines y no falla si fal
 
 | Señal | GPIO | Estado |
 |---|---|---|
-| Zumbador activo | 21 | opcional (la app suena en el celular) |
+| Zumbador activo | 21 | **recomendado** (+ a GPIO 21, − a GND): la rúbrica pide «un sonido con cada disparo» y el rival nos maneja con SU app, que no sabemos si suena |
 | LED de acierto | 22 | **descartado** |
 | Pulsador TEST | 25 | opcional (el TEST se lanza desde la app) |
 | Interruptor MAINT | 26 | opcional (modo mantenimiento Wi-Fi) |

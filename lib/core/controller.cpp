@@ -29,19 +29,33 @@ float clampServo(float v) {
   return v;
 }
 
-// Rampa de `now` a `target`: pasos de a lo sumo cfg::MAX_STEP_DEG, uno cada cfg::STEP_MS. Se detiene si hay STOP.
-// `now` siempre refleja la última posición realmente ordenada al servo.
-void rampTo(hal::Servo& s, float& now, float target, hal::Clock& clock, const volatile bool& stop) {
-  for (;;) {
+// Perfil "smootherstep" (6t^5 - 15t^4 + 10t^3): velocidad y aceleración nulas en los extremos, así el servo arranca y frena
+// sin tirones (menos pico de corriente en la fuente, menos vibración en el cartón, menos rebote al llegar). Su pendiente
+// máxima es 1,875 veces la media.
+float smootherstep(float t) { return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f); }
+
+// Camino SINCRONIZADO de (pan, tilt) = (now) a (panTo, tiltTo): los dos ejes salen y llegan juntos, siguiendo el mismo perfil
+// (la recta en el espacio de los servos). Dura lo que pida el eje que más recorre para no pasar de `peakStepDeg` por paso.
+// El número de pasos solo depende de la distancia (no del reloj): el resultado es idéntico y verificable en las pruebas.
+// `now*` siempre refleja la última posición realmente ordenada. Se detiene si hay STOP.
+void glide(hal::Servo& pan, hal::Servo& tilt, float& panNow, float& tiltNow, float panTo, float tiltTo, float peakStepDeg,
+           hal::Clock& clock, const volatile bool& stop) {
+  const float p0 = panNow, t0 = tiltNow;
+  const float dp = panTo - p0, dt = tiltTo - t0;
+  const float far = std::fmax(std::fabs(dp), std::fabs(dt));
+  if (!(far > cfg::MOVE_EPS_DEG)) {   // ya está (o llegó un NaN): nada que mover
+    if (std::fabs(dp) > 0.0f && std::fabs(dp) <= cfg::MOVE_EPS_DEG) { panNow = panTo; pan.writeDeg(panNow); }
+    if (std::fabs(dt) > 0.0f && std::fabs(dt) <= cfg::MOVE_EPS_DEG) { tiltNow = tiltTo; tilt.writeDeg(tiltNow); }
+    return;
+  }
+  int steps = static_cast<int>(std::ceil(1.875f * far / peakStepDeg));
+  if (steps < 1) steps = 1;
+  for (int k = 1; k <= steps; ++k) {
     if (stop) return;
-    const float diff = target - now;
-    if (!(std::fabs(diff) > 0.0f)) return;   // llegó (o `target` no es un número): nada que hacer
-    if (std::fabs(diff) <= cfg::MAX_STEP_DEG) {
-      now = target;
-    } else {
-      now += (diff > 0.0f) ? cfg::MAX_STEP_DEG : -cfg::MAX_STEP_DEG;
-    }
-    s.writeDeg(now);
+    const float s = (k == steps) ? 1.0f : smootherstep(static_cast<float>(k) / static_cast<float>(steps));
+    if (dp != 0.0f) { panNow = (k == steps) ? panTo : p0 + dp * s; pan.writeDeg(panNow); }
+    if (stop) return;   // un STOP llegado mientras se escribía el primer eje no debe mover el segundo
+    if (dt != 0.0f) { tiltNow = (k == steps) ? tiltTo : t0 + dt * s; tilt.writeDeg(tiltNow); }
     clock.delayMs(cfg::STEP_MS);
   }
 }
@@ -147,11 +161,19 @@ bool Controller::busy() const { return busy_; }
 
 const Calibration& Controller::calibration() const { return cal_; }
 
-void Controller::moveAxis(hal::Servo& s, float& nowDeg, float targetDeg) {
-  // Siempre se llega al destino subiendo el ángulo (elimina la holgura de los engranes).
-  const Approach ap = approach(nowDeg, targetDeg, cfg::OVERSHOOT_DEG);
-  if (ap.needsWaypoint) rampTo(s, nowDeg, clampServo(ap.waypointDeg), clock_, stop_);
-  rampTo(s, nowDeg, targetDeg, clock_, stop_);
+void Controller::moveTo(float panDeg, float tiltDeg) {
+  panDeg = clampServo(panDeg);
+  tiltDeg = clampServo(tiltDeg);
+  // Cada eje llega SIEMPRE subiendo el ángulo (elimina la holgura de los engranes): el que debe bajar pasa antes por un
+  // waypoint por debajo del destino. Primero se va a los puntos intermedios, rápido y a la vez; después se remata despacio.
+  const bool panDown = panDeg < panNowDeg_ - cfg::MOVE_EPS_DEG;
+  const bool tiltDown = tiltDeg < tiltNowDeg_ - cfg::MOVE_EPS_DEG;
+  const float p1 = panDown ? clampServo(panDeg - cfg::OVERSHOOT_DEG) : panDeg;
+  const float t1 = tiltDown ? clampServo(tiltDeg - cfg::OVERSHOOT_DEG) : tiltDeg;
+  glide(pan_, tilt_, panNowDeg_, tiltNowDeg_, p1, t1, cfg::MAX_STEP_DEG, clock_, stop_);
+  if ((panDown || tiltDown) && !stop_) {
+    glide(pan_, tilt_, panNowDeg_, tiltNowDeg_, panDeg, tiltDeg, cfg::CREEP_STEP_DEG, clock_, stop_);
+  }
 }
 
 bool Controller::fire(Cell c, std::string& errLine) {
@@ -174,8 +196,7 @@ bool Controller::fire(Cell c, std::string& errLine) {
 
   attachServos();
 
-  moveAxis(pan_, panNowDeg_, target.panServoDeg);
-  moveAxis(tilt_, tiltNowDeg_, target.tiltServoDeg);
+  moveTo(target.panServoDeg, target.tiltServoDeg);
   if (stop_) return stopped();
 
   clock_.delayMs(cfg::SETTLE_MS);
@@ -334,8 +355,7 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
         break;
       }
       attachServos();
-      moveAxis(pan_, panNowDeg_, p);
-      moveAxis(tilt_, tiltNowDeg_, t);
+      moveTo(p, t);
       if (stop_) {
         say("ERR STOP");
       } else {
@@ -370,15 +390,27 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
       grid_.has[i] = true;
       grid_.pan[i] = panNowDeg_;
       grid_.tilt[i] = tiltNowDeg_;
-      if (i < 4) grid_.valid = false;   // cambiar una esquina invalida el mapa hasta el próximo CAL FIT
+      if (i != 4) grid_.valid = false;   // cambiar una esquina o un medio de borde invalida el mapa hasta el próximo CAL FIT (el control no)
       say("OK CORNER " + std::to_string(pr.cmd.x) + " " + fmt2(panNowDeg_) + " " + fmt2(tiltNowDeg_));
       break;
     }
 
     case CmdType::Corners: {
       std::string bits;
-      for (int i = 0; i < GRID_PTS; ++i) bits += grid_.has[i] ? '1' : '0';
+      for (int i = 0; i < 5; ++i) bits += grid_.has[i] ? '1' : '0';   // solo los 5 primeros: es lo que lee la app; los 9 salen por PTS
       say("CORNERS " + bits + " " + (grid_.valid ? "1" : "0"));
+      break;
+    }
+
+    case CmdType::Info:
+      say("INFO " + (link_.info ? link_.info() : std::string("-")) + " pan=" + fmt2(panNowDeg_) + " tilt=" + fmt2(tiltNowDeg_) +
+          " map=" + (grid_.valid ? "GRID" : "GEO") + " fw=" + FW_VERSION);
+      break;
+
+    case CmdType::Pts: {
+      std::string bits;
+      for (int i = 0; i < GRID_PTS; ++i) bits += grid_.has[i] ? '1' : '0';
+      say("PTS " + bits + " " + (grid_.valid ? "1" : "0"));
       break;
     }
 
@@ -411,8 +443,7 @@ void Controller::handleLine(const std::string& line, const Reply& out) {
         break;
       }
       attachServos();
-      moveAxis(pan_, panNowDeg_, target.panServoDeg);
-      moveAxis(tilt_, tiltNowDeg_, target.tiltServoDeg);
+      moveTo(target.panServoDeg, target.tiltServoDeg);
       say(stop_ ? "ERR STOP" : "OK AIM " + std::to_string(pr.cmd.x) + " " + std::to_string(pr.cmd.y));
       break;
     }

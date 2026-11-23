@@ -1,4 +1,5 @@
 #include "transport_bt.h"
+#include <Arduino.h>
 
 namespace transport {
 
@@ -10,9 +11,9 @@ bool BtTransport::readLine(std::string& out) {
   while (serial_.available() > 0) {
     const int c = serial_.read();
     if (c < 0) break;
-    if (assembler_.feed((uint8_t)c, out)) return true;
+    if (assembler_.feed((uint8_t)c, out, millis())) return true;
   }
-  return false;
+  return assembler_.flushIdle(out, millis());   // apps que no mandan salto de línea: "TEST" suelto se entrega a los 300 ms
 }
 
 void BtTransport::writeLine(const std::string& line) {

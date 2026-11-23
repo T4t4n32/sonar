@@ -15,9 +15,9 @@ bool NvsGridStore::load(core::GridCal& out) {
   if (!prefs.begin(kNamespace, /*readOnly=*/true)) return false;
   unsigned char blob[core::GRID_BLOB_SIZE];
   bool ok = false;
-  if (prefs.getBytesLength(kKey) == core::GRID_BLOB_SIZE &&
-      prefs.getBytes(kKey, blob, sizeof(blob)) == core::GRID_BLOB_SIZE) {
-    ok = core::gridDeserialize(blob, core::GRID_BLOB_SIZE, out);   // verifica magia, versión y CRC, y recalcula el ajuste
+  const size_t len = prefs.getBytesLength(kKey);
+  if ((len == core::GRID_BLOB_SIZE || len == core::GRID_BLOB_SIZE_V1) && prefs.getBytes(kKey, blob, sizeof(blob)) == len) {
+    ok = core::gridDeserialize(blob, static_cast<unsigned>(len), out);   // magia, versión (1 o 2), CRC; recalcula el ajuste
   }
   prefs.end();
   return ok;

@@ -109,14 +109,17 @@ bool parseUInt(const std::string& t, long& out) {
 
 // Órdenes v3 (calibración por esquinas). `w` ya está en mayúsculas.
 bool isV3(const std::string& w) {
-  return w == "PT" || w == "JOG" || w == "GOTO" || w == "LASER" || w == "CORNER" || w == "CORNERS" || w == "AIM";
+  return w == "PT" || w == "JOG" || w == "GOTO" || w == "LASER" || w == "CORNER" || w == "CORNERS" || w == "PTS" || w == "INFO" || w == "AIM";
 }
 
 ParseResult parseV3(const std::vector<std::string>& tok) {
   const std::string& w = tok[0];
-  if (w == "PT" || w == "CORNERS") {
+  if (w == "PT" || w == "CORNERS" || w == "PTS" || w == "INFO") {
     if (tok.size() != 1) return failure(ParseError::BadFormat);
-    return simple(w == "PT" ? CmdType::Pt : CmdType::Corners);
+    return simple(w == "PT" ? CmdType::Pt
+                  : w == "PTS" ? CmdType::Pts
+                  : w == "INFO" ? CmdType::Info
+                                : CmdType::Corners);
   }
   if (w == "LASER") {
     if (tok.size() == 1) return simple(CmdType::LaserQuery);
@@ -140,7 +143,7 @@ ParseResult parseV3(const std::vector<std::string>& tok) {
   if (w == "CORNER") {
     long n;
     if (tok.size() != 2 || !parseUInt(tok[1], n)) return failure(ParseError::BadFormat);
-    if (n < 1 || n > 5) return failure(ParseError::Range);
+    if (n < 1 || n > 9) return failure(ParseError::Range);
     ParseResult r = simple(CmdType::Corner);
     r.cmd.x = static_cast<int>(n);
     return r;
