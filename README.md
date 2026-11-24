@@ -105,6 +105,10 @@ Detalles y requisitos: [`app/LEEME.md`](app/LEEME.md).
 - [`docs/03-firmware-y-app/APP_SONAR.md`](docs/03-firmware-y-app/APP_SONAR.md) — plan y diseño de la app.
 - [`docs/README.md`](docs/README.md) — índice completo (diseño, electrónica, compras, publicación).
 
+## Video y material audiovisual
+
+El repositorio solo contiene código funcional (firmware, app, herramientas) y su documentación técnica. El video de entrega «Misión: Cero Punto Dos», su guion, los scripts de edición y todos los archivos de audio y video viven en el Drive del proyecto, en `Proyecto - Batalla Naval\Video\` (carpetas `final\` y `fuente-edicion\`).
+
 ## Licencia
 
 Código bajo **MIT** ([`LICENSE`](LICENSE)); documentación CC BY-SA y hardware CERN-OHL: ver [`docs/05-publicacion/LICENCIAS.md`](docs/05-publicacion/LICENCIAS.md).
