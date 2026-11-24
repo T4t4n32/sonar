@@ -7,3 +7,6 @@
 *.mp3
 *.wav
 !LEEME.md
+*.ogg
+*.opus
+*.log
