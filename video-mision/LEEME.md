@@ -1,15 +1,26 @@
-# Video «MISIÓN: CERO PUNTO DOS» — montaje automático
+# Video «MISIÓN: CERO PUNTO DOS» — montaje automático (v2)
 
-`python armar_video.py --nombres "Sebastián y [Compañero]"` arma todo el video con ffmpeg (tarjetas de título animadas, orden del guion, voz, música, sonido normalizado, MP4 1080p en `salida/`).
-`python armar_video.py --vista-previa` hace lo mismo en 640×360, en segundos, para revisar el orden.
+`python armar_video.py --nombres "Sebastián y Juan José"` arma todo el video con ffmpeg y lo deja en `salida/`.
+`python armar_video.py --vista-previa` lo hace en 640×360 en poco tiempo, para revisar el orden.
 
-## Qué poner en cada carpeta (vale .mp4 .mov .mkv .m4v)
-| Carpeta | Archivos |
+Qué hace: tarjetas de título animadas · color unificado (verde oliva) en las tomas habladas · **cortes de evidencia** sobre lo que se explica (foto real del montaje, captura de la app, hoja impresa) con
+rótulo técnico · texto cinético en la apertura · voz limpia y nivelada · música opcional · MP4 1080p. Si falta una toma pone una tarjeta «FALTA: …» y sigue.
+
+## Carpetas (los videos y audios no se suben a git; ver `.gitignore`)
+| Carpeta | Contenido |
 |---|---|
-| `clips-flow/` | `sobre` · `mesa` · `radio` · `sello` · `amanecer` (los clips de Flow; `mesa`, `radio`, `amanecer` y `sello` son fondo de las tarjetas) |
-| `tomas/` | `01-orden` (Sebas) · `02-campo` · `03-tropa` · `04-mapa` · `05-pulso` · `06-radio` · `07-prueba` (el compañero) · `08-regreso` (los dos) |
-| `voz/` | `00-general` (.m4a/.mp3/.wav): la voz del General que suena sobre el sobre |
-| `musica/` | un .mp3 libre de derechos (opcional; suena al 10 %) |
+| `clips-flow/` | `sobre` · `mesa` · `radio` · `sello` · `amanecer` (generados en Flow) |
+| `tomas/` | `01-orden` (Sebas a cámara, opcional) · `02-campo` … `06-radio` · `07-prueba` · `08-regreso`. Si no están `02`–`06`, se usan `tomas/j_jose_videos/1–5.mp4` |
+| `voz/` | `P1_sebas` (voz del General, sobre el sobre) · `P1_juanJose` (lectura de la orden; suena sobre los clips mientras no haya toma `01-orden`) |
+| `evidencia/` | fotos y capturas (ya incluidas) **y los videos reales de funcionamiento** (ver abajo) |
+| `musica/` | un `.mp3`/`.m4a` libre de derechos (opcional; suena al 10 %) |
 
-Si falta una toma, el montaje pone una tarjeta «FALTA: …» y sigue. Cada toma se puede regrabar y volver a correr el script.
-Los archivos de video de esta carpeta no se suben a git (ver `.gitignore`).
+## Cómo se sustituyen las fotos por videos reales
+Si pones en `evidencia/` un video con alguno de estos nombres, el montaje lo usa **en lugar de la foto fija** (cada corte continúa donde terminó el anterior del mismo video):
+`pantalla-app.mp4` (radar, veredicto, hundido) · `calibracion.mp4` (las 4 pantallas de calibración) · `plantilla.mp4` · `maqueta.mp4` (servos) · `stop.mp4` · `laser.mp4`.
+Y las tomas completas: `tomas/07-prueba.mp4` (el TEST) y `tomas/08-regreso.mp4` (los dos). La guía de cómo grabarlas es `GUIA-TOMAS-FUNCIONAMIENTO.pdf`.
+
+## Otros archivos
+- `HOJA-TOMAS-CAPITAN-ALFA.pdf` — qué dice y cómo se viste Sebas (`hoja_tomas_alfa.py`).
+- `GUIA-TOMAS-FUNCIONAMIENTO.pdf` — cómo grabar las tomas de funcionamiento (`guia_tomas_funcionamiento.py`).
+- Los tiempos de los cortes de cada toma hablada están en `armar_video.py` (diccionario `CORTES`), calculados con la transcripción de cada toma.
