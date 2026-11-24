@@ -10,3 +10,7 @@
 *.ogg
 *.opus
 *.log
+_trabajo/
+recursos/musica/
+recursos/sfx/*.mp3
+salida/
