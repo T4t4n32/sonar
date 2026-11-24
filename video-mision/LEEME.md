@@ -11,7 +11,7 @@ rótulo técnico · texto cinético en la apertura · voz limpia y nivelada · m
 |---|---|
 | `clips-flow/` | `sobre` · `mesa` · `radio` · `sello` · `amanecer` (generados en Flow) |
 | `tomas/` | `01-orden` (Sebas a cámara, opcional) · `02-campo` … `06-radio` · `07-prueba` · `08-regreso`. Si no están `02`–`06`, se usan `tomas/j_jose_videos/1–5.mp4` |
-| `voz/` | `P1_sebas` (voz del General, sobre el sobre) · `P1_juanJose` (lectura de la orden; suena sobre los clips mientras no haya toma `01-orden`) |
+| `voz/` | `P1_sebas` o `00-general` (la voz del General, solo Sebas; suena una vez sobre el sobre) · `01-orden` (la orden de Alfa **dicha por Sebas**; si prefieres a cámara, `tomas/01-orden.mp4`). El montaje **nunca usa la voz de otra persona** para las partes de Sebas |
 | `evidencia/` | fotos y capturas (ya incluidas) **y los videos reales de funcionamiento** (ver abajo) |
 | `musica/` | un `.mp3`/`.m4a` libre de derechos (opcional; suena al 10 %) |
 

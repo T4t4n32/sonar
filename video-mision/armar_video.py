@@ -10,7 +10,7 @@ Si falta una toma pone una tarjeta «FALTA: …» y sigue; en cuanto grabes la t
     python armar_video.py --nombres "Sebastián y Juan José"
 
 Carpetas: clips-flow/ (sobre mesa radio sello amanecer) · tomas/ (01-orden 02-campo 03-tropa 04-mapa 05-pulso 06-radio 07-prueba 08-regreso;
-si no están, se usan tomas/j_jose_videos/1..5.mp4) · voz/ (P1_sebas = voz del General, P1_juanJose = lectura de la orden) · evidencia/ · musica/
+si no están, se usan tomas/j_jose_videos/1..5.mp4) · voz/ (P1_sebas o 00-general = voz del General, 01-orden = la orden dicha por Sebas; NUNCA se usa la voz de otra persona) · evidencia/ · musica/
 """
 import argparse
 import glob
@@ -81,6 +81,7 @@ RESPALDO = {"02-campo": "1", "03-tropa": "2", "04-mapa": "3", "05-pulso": "4", "
 ORDEN_TEXTOS = [(6.2, 8.4, "4,8", 220), (8.4, 11.7, "−0,2", 220), (11.7, 15.8, "TRINCHERA DE LA ESTÉTICA", 90),
                 (15.8, 21.0, "EXPLICAR LA CAMPAÑA", 100), (21.0, 26.2, "EL CINCO SAGRADO", 110)]
 ORDEN_CORTES = [(26.2, 29.0, "maqueta", "SARGENTO BRAVO · EL FRENTE ES SUYO")]
+ORDEN_REF = 28.7
 ORDEN_VISUAL = [("mesa", 8.0), ("radio", 8.0), ("sello", 8.0), ("amanecer", 6.0)]
 
 ESCENAS = [
@@ -304,7 +305,7 @@ class Montaje:
 
     # ------------------------------------------------------------ escenas
     def frio(self):
-        voz = buscar("voz", "P1_sebas", EXT_A)
+        voz = buscar("voz", "00-general", EXT_A) or buscar("voz", "P1_sebas", EXT_A)
         sobre, mesa = buscar("clips-flow", "sobre", EXT_V), buscar("clips-flow", "mesa", EXT_V)
         if not sobre:
             return self.falta("sobre", "clips-flow/sobre.mp4")
@@ -320,9 +321,9 @@ class Montaje:
         toma = buscar("tomas", "01-orden", EXT_V)
         if toma:                                                     # Sebas a cámara
             return self.hablada_archivo("01-orden", toma, [])
-        voz = buscar("voz", "P1_juanJose", EXT_A + EXT_V)
+        voz = buscar("voz", "01-orden", EXT_A + EXT_V)                # solo la voz de Sebas: la orden es SU parte
         if not voz:
-            return self.falta("orden", "tomas/01-orden.mp4 o voz/P1_juanJose")
+            return self.falta("orden", "Toma B: tomas/01-orden.mp4 o voz/01-orden (la dice Sebas)")
         T = duracion(voz) + 0.8
         piezas = []
         for nombre, d in ORDEN_VISUAL:
@@ -335,7 +336,10 @@ class Montaje:
         if not piezas:
             return self.falta("orden", "clips-flow/*")
         af = f"{LIMPIA_VOZ},aresample=48000,aformat=channel_layouts=stereo,adelay=300|300,apad,loudnorm=I=-16:TP=-1.5"
-        self.componer("orden", piezas, af, voz, min(T, sum(d for _, d in piezas)), ORDEN_CORTES, ORDEN_TEXTOS)
+        f = T / ORDEN_REF                                            # los textos están medidos sobre una lectura de 28,7 s: se escalan a la duración real
+        textos = [(a * f, b * f, tx, tam) for a, b, tx, tam in ORDEN_TEXTOS]
+        cortes = [(a * f, min(b * f, T - 0.1), ev, rot) for a, b, ev, rot in ORDEN_CORTES]
+        self.componer("orden", piezas, af, voz, min(T, sum(d for _, d in piezas)), cortes, textos)
 
     def hablada(self, id_):
         p = buscar("tomas", id_, EXT_V)
